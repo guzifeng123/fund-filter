@@ -4,6 +4,7 @@ param(
   [string]$Database = "fund_app",
   [string]$User = "fund_user",
   [int]$RetentionCount = 0,
+  [switch]$Compress,
   [switch]$SkipDumpForRetentionTest
 )
 
@@ -33,8 +34,8 @@ function Invoke-BackupRetention {
     return
   }
 
-  $pattern = "$DatabaseName-*.sql"
-  $backups = Get-ChildItem -LiteralPath $Directory -File -Filter $pattern |
+  $backups = Get-ChildItem -LiteralPath $Directory -File |
+    Where-Object { $_.Name -like "$DatabaseName-*.sql" -or $_.Name -like "$DatabaseName-*.sql.gz" } |
     Sort-Object LastWriteTimeUtc -Descending
 
   $toRemove = $backups | Select-Object -Skip $KeepCount
@@ -46,6 +47,35 @@ function Invoke-BackupRetention {
       Remove-Item -LiteralPath $checksumPath -Force
       Write-Host "Removed old checksum: $checksumPath"
     }
+  }
+}
+
+function Compress-BackupFile {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$SourcePath,
+    [Parameter(Mandatory = $true)]
+    [string]$DestinationPath
+  )
+
+  $sourceStream = [System.IO.File]::OpenRead($SourcePath)
+  try {
+    $destinationStream = [System.IO.File]::Create($DestinationPath)
+    try {
+      $gzipStream = [System.IO.Compression.GZipStream]::new($destinationStream, [System.IO.Compression.CompressionLevel]::Optimal)
+      try {
+        $sourceStream.CopyTo($gzipStream)
+      }
+      finally {
+        $gzipStream.Dispose()
+      }
+    }
+    finally {
+      $destinationStream.Dispose()
+    }
+  }
+  finally {
+    $sourceStream.Dispose()
   }
 }
 
@@ -64,6 +94,14 @@ else {
   finally {
     Pop-Location
   }
+}
+
+if ($Compress) {
+  $compressedBackupPath = "$backupPath.gz"
+  Compress-BackupFile -SourcePath $backupPath -DestinationPath $compressedBackupPath
+  Remove-Item -LiteralPath $backupPath -Force
+  $backupPath = $compressedBackupPath
+  Write-Host "Compressed backup completed: $backupPath"
 }
 
 $backup = Get-Item -LiteralPath $backupPath

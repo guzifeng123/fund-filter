@@ -44,11 +44,42 @@ if ($SkipRestoreForChecksumTest) {
   return
 }
 
+function Read-BackupSql {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path
+  )
+
+  if ($Path.EndsWith(".gz", [System.StringComparison]::OrdinalIgnoreCase)) {
+    $sourceStream = [System.IO.File]::OpenRead($Path)
+    try {
+      $gzipStream = [System.IO.Compression.GZipStream]::new($sourceStream, [System.IO.Compression.CompressionMode]::Decompress)
+      try {
+        $reader = [System.IO.StreamReader]::new($gzipStream, [System.Text.Encoding]::UTF8)
+        try {
+          return $reader.ReadToEnd()
+        }
+        finally {
+          $reader.Dispose()
+        }
+      }
+      finally {
+        $gzipStream.Dispose()
+      }
+    }
+    finally {
+      $sourceStream.Dispose()
+    }
+  }
+
+  return Get-Content -LiteralPath $Path -Raw
+}
+
 Push-Location -LiteralPath $workspaceRoot
 try {
   Write-Host "Restoring $resolvedBackupPath into $Database on docker compose service '$Service'."
   Write-Host "Consider stopping api/web first: docker compose stop api web"
-  Get-Content -LiteralPath $resolvedBackupPath -Raw | docker compose exec -T $Service psql -U $User -d $Database
+  Read-BackupSql -Path $resolvedBackupPath | docker compose exec -T $Service psql -U $User -d $Database
 }
 finally {
   Pop-Location

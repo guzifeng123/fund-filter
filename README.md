@@ -164,7 +164,9 @@ npm.cmd run build:web
 ```powershell
 .\scripts\backup-db.ps1
 .\scripts\backup-db.ps1 -RetentionCount 10
+.\scripts\backup-db.ps1 -Compress -RetentionCount 10
 .\scripts\restore-db.ps1 -BackupPath ".\backups\fund_app-YYYYMMDD-HHMMSS.sql" -ConfirmRestore RESTORE
+.\scripts\restore-db.ps1 -BackupPath ".\backups\fund_app-YYYYMMDD-HHMMSS.sql.gz" -ConfirmRestore RESTORE
 ```
 
 备份脚本会生成同名 `.sha256` 校验文件；恢复脚本会在校验文件存在时先验证完整性。
