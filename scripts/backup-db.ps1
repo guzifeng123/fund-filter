@@ -5,6 +5,7 @@ param(
   [string]$User = "fund_user",
   [int]$RetentionCount = 0,
   [switch]$Compress,
+  [string]$JsonReportPath,
   [switch]$SkipDumpForRetentionTest
 )
 
@@ -17,8 +18,23 @@ $resolvedOutputDir = if ([System.IO.Path]::IsPathRooted($OutputDir)) {
 else {
   Join-Path $workspaceRoot $OutputDir
 }
+$startedAt = Get-Date
+$removedItems = @()
 
 New-Item -ItemType Directory -Force -Path $resolvedOutputDir | Out-Null
+
+function Resolve-ReportPath {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path
+  )
+
+  if ([System.IO.Path]::IsPathRooted($Path)) {
+    return $Path
+  }
+
+  return Join-Path $workspaceRoot $Path
+}
 
 function Invoke-BackupRetention {
   param(
@@ -43,9 +59,11 @@ function Invoke-BackupRetention {
     $checksumPath = "$($item.FullName).sha256"
     Remove-Item -LiteralPath $item.FullName -Force
     Write-Host "Removed old backup: $($item.FullName)"
+    $script:removedItems += $item.FullName
     if (Test-Path -LiteralPath $checksumPath) {
       Remove-Item -LiteralPath $checksumPath -Force
       Write-Host "Removed old checksum: $checksumPath"
+      $script:removedItems += $checksumPath
     }
   }
 }
@@ -118,3 +136,32 @@ $checksumPath = "$($backup.FullName).sha256"
 Write-Host "Checksum completed: $checksumPath"
 
 Invoke-BackupRetention -Directory $resolvedOutputDir -DatabaseName $Database -KeepCount $RetentionCount
+
+if ($JsonReportPath) {
+  $finishedAt = Get-Date
+  $reportPath = Resolve-ReportPath -Path $JsonReportPath
+  $reportDirectory = Split-Path -Parent $reportPath
+  if ($reportDirectory -and -not (Test-Path -LiteralPath $reportDirectory)) {
+    New-Item -ItemType Directory -Path $reportDirectory | Out-Null
+  }
+
+  [ordered]@{
+    ok = $true
+    started_at = $startedAt.ToUniversalTime().ToString("o")
+    finished_at = $finishedAt.ToUniversalTime().ToString("o")
+    duration_ms = [int][Math]::Round(($finishedAt - $startedAt).TotalMilliseconds)
+    database = $Database
+    service = $Service
+    user = $User
+    compressed = [bool]$Compress
+    backup_path = $backup.FullName
+    backup_file = $backup.Name
+    backup_size_bytes = $backup.Length
+    checksum_path = $checksumPath
+    retention_count = $RetentionCount
+    removed_items = @($removedItems)
+    skip_dump_for_retention_test = [bool]$SkipDumpForRetentionTest
+  } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $reportPath -Encoding utf8
+
+  Write-Host "Backup report completed: $reportPath"
+}

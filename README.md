@@ -165,6 +165,7 @@ npm.cmd run build:web
 .\scripts\backup-db.ps1
 .\scripts\backup-db.ps1 -RetentionCount 10
 .\scripts\backup-db.ps1 -Compress -RetentionCount 10
+.\scripts\backup-db.ps1 -Compress -RetentionCount 10 -JsonReportPath ".\output\checks\backup-report.json"
 .\scripts\restore-db.ps1 -BackupPath ".\backups\fund_app-YYYYMMDD-HHMMSS.sql" -ConfirmRestore RESTORE
 .\scripts\restore-db.ps1 -BackupPath ".\backups\fund_app-YYYYMMDD-HHMMSS.sql.gz" -ConfirmRestore RESTORE
 ```
