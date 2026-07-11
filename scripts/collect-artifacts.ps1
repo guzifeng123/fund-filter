@@ -116,6 +116,61 @@ function Test-ArtifactPattern {
   return $false
 }
 
+function Format-MarkdownCell {
+  param(
+    [AllowNull()]
+    [object]$Value
+  )
+
+  if ($null -eq $Value) {
+    return ""
+  }
+
+  return ($Value.ToString() -replace "\|", "\|").Replace("`r", " ").Replace("`n", " ")
+}
+
+function Write-ArtifactSummary {
+  param(
+    [Parameter(Mandatory = $true)]
+    [System.Collections.IDictionary]$Manifest,
+    [Parameter(Mandatory = $true)]
+    [string]$Path
+  )
+
+  $lines = New-Object System.Collections.Generic.List[string]
+  $status = if ($Manifest.ok) { "OK" } else { "FAILED" }
+  $lines.Add("# Release Artifact Summary")
+  $lines.Add("")
+  $lines.Add("- Status: $status")
+  $lines.Add("- Profile: $(Format-MarkdownCell $Manifest.profile)")
+  $lines.Add("- Git commit: $(Format-MarkdownCell $Manifest.git_commit)")
+  $lines.Add("- Started: $(Format-MarkdownCell $Manifest.started_at)")
+  $lines.Add("- Finished: $(Format-MarkdownCell $Manifest.finished_at)")
+  $lines.Add("- Duration ms: $(Format-MarkdownCell $Manifest.duration_ms)")
+  $lines.Add("- Artifact count: $(Format-MarkdownCell $Manifest.artifact_count)")
+  $lines.Add("")
+
+  if (@($Manifest.missing_required_artifacts).Count -gt 0) {
+    $lines.Add("## Missing Required Artifacts")
+    $lines.Add("")
+    foreach ($missing in $Manifest.missing_required_artifacts) {
+      $lines.Add("- ``$(Format-MarkdownCell $missing)``")
+    }
+    $lines.Add("")
+  }
+
+  $lines.Add("## Artifacts")
+  $lines.Add("")
+  $lines.Add("| Source | Size bytes | SHA256 |")
+  $lines.Add("| --- | ---: | --- |")
+  foreach ($artifact in $Manifest.artifacts) {
+    $source = Convert-ToArtifactPath -Path $artifact.source
+    $lines.Add("| $(Format-MarkdownCell $source) | $(Format-MarkdownCell $artifact.size_bytes) | ``$(Format-MarkdownCell $artifact.sha256)`` |")
+  }
+
+  $lines | Set-Content -LiteralPath $Path -Encoding utf8
+}
+
 if (-not $WhatIf) {
   New-Item -ItemType Directory -Force -Path $resolvedRunDirectory | Out-Null
 }
@@ -194,6 +249,9 @@ if (-not $WhatIf) {
   $manifestPath = Join-Path $resolvedRunDirectory "manifest.json"
   $manifest | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $manifestPath -Encoding utf8
   Write-Host "Artifact manifest completed: $manifestPath"
+  $summaryPath = Join-Path $resolvedRunDirectory "summary.md"
+  Write-ArtifactSummary -Manifest $manifest -Path $summaryPath
+  Write-Host "Artifact summary completed: $summaryPath"
 }
 
 if (-not $ok) {
