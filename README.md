@@ -174,6 +174,7 @@ npm.cmd run build:web
 ```powershell
 .\scripts\check-all.ps1
 .\scripts\check-all.ps1 -CheckOpenApiDrift
+.\scripts\check-all.ps1 -CheckOpenApiDrift -OpenApiDiffPath ".\output\checks\openapi.diff"
 ```
 
 ## 常见失败排查

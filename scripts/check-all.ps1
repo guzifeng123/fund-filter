@@ -1,6 +1,7 @@
 param(
   [switch]$SkipBuild,
-  [switch]$CheckOpenApiDrift
+  [switch]$CheckOpenApiDrift,
+  [string]$OpenApiDiffPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,6 +20,29 @@ function Invoke-Step {
   Write-Host "==> $Name"
   & $Command
   Write-Host "[ok] $Name"
+}
+
+function Test-GitRepository {
+  try {
+    git rev-parse --is-inside-work-tree | Out-Null
+    return $LASTEXITCODE -eq 0
+  }
+  catch {
+    return $false
+  }
+}
+
+function Resolve-WorkspacePath {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path
+  )
+
+  if ([System.IO.Path]::IsPathRooted($Path)) {
+    return $Path
+  }
+
+  return Join-Path $workspaceRoot $Path
 }
 
 Invoke-Step -Name "Backend tests" -Command {
@@ -59,9 +83,27 @@ Invoke-Step -Name "OpenAPI export" -Command {
   npm.cmd run export:openapi
 
   if ($CheckOpenApiDrift) {
-    $afterHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $openApiPath).Hash
-    if ($beforeHash -ne $afterHash) {
-      throw "OpenAPI contract changed after export. Review packages/contracts/openapi.json and commit the updated contract if expected."
+    if (Test-GitRepository) {
+      $diff = git diff -- packages/contracts/openapi.json
+      if ($OpenApiDiffPath) {
+        $diffPath = Resolve-WorkspacePath -Path $OpenApiDiffPath
+        $diffDirectory = Split-Path -Parent $diffPath
+        if ($diffDirectory -and -not (Test-Path -LiteralPath $diffDirectory)) {
+          New-Item -ItemType Directory -Path $diffDirectory | Out-Null
+        }
+        [string]::Join([Environment]::NewLine, @($diff)) | Set-Content -LiteralPath $diffPath -Encoding utf8
+      }
+
+      git diff --exit-code -- packages/contracts/openapi.json | Out-Null
+      if ($LASTEXITCODE -ne 0) {
+        throw "OpenAPI contract drift detected by git diff. Review packages/contracts/openapi.json and commit the updated contract if expected."
+      }
+    }
+    else {
+      $afterHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $openApiPath).Hash
+      if ($beforeHash -ne $afterHash) {
+        throw "OpenAPI contract changed after export. Review packages/contracts/openapi.json and commit the updated contract if expected."
+      }
     }
   }
 }

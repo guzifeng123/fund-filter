@@ -10,6 +10,7 @@ dist/
 coverage/
 output/playwright/
 output/smoke/
+output/checks/
 .env
 .env.local
 *.pyc
