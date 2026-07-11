@@ -155,6 +155,7 @@ npm.cmd run build:web
 .\scripts\clean-generated.ps1 -WhatIf
 .\scripts\clean-generated.ps1
 .\scripts\clean-generated.ps1 -WhatIf -SearchRoots apps,packages
+.\scripts\clean-generated.ps1 -WhatIf -JsonReportPath ".\output\checks\cleanup-report.json"
 ```
 
 清理脚本默认跳过 `node_modules`、`.git`、`.venv`、`output` 等大型或需保留目录，并且只允许删除工作区内部路径。
