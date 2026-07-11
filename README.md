@@ -152,7 +152,10 @@ npm.cmd run build:web
 ```powershell
 .\scripts\clean-generated.ps1 -WhatIf
 .\scripts\clean-generated.ps1
+.\scripts\clean-generated.ps1 -WhatIf -SearchRoots apps,packages
 ```
+
+清理脚本默认跳过 `node_modules`、`.git`、`.venv`、`output` 等大型或需保留目录，并且只允许删除工作区内部路径。
 
 备份与恢复本地数据库：
 

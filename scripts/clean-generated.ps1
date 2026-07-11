@@ -1,5 +1,7 @@
 param(
-  [switch]$WhatIf
+  [switch]$WhatIf,
+  [string[]]$SearchRoots = @("."),
+  [string[]]$ExcludeDirectories = @("node_modules", ".git", ".next", ".venv", "output", "backups", ".playwright-cli")
 )
 
 $ErrorActionPreference = "Stop"
@@ -39,6 +41,82 @@ function Remove-GeneratedItem {
   Write-Host "Removed $resolved"
 }
 
+function Resolve-SearchRoot {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path
+  )
+
+  $candidate = if ([System.IO.Path]::IsPathRooted($Path)) {
+    $Path
+  }
+  else {
+    Join-Path $workspaceRoot $Path
+  }
+
+  if (-not (Test-Path -LiteralPath $candidate)) {
+    return $null
+  }
+
+  return Assert-InWorkspace -Path $candidate
+}
+
+function Test-ExcludedDirectory {
+  param(
+    [Parameter(Mandatory = $true)]
+    [System.IO.DirectoryInfo]$Directory
+  )
+
+  foreach ($name in $ExcludeDirectories) {
+    if ($Directory.Name -eq $name) {
+      return $true
+    }
+  }
+
+  return $false
+}
+
+function Get-GeneratedPatternTargets {
+  $targets = New-Object System.Collections.Generic.List[System.IO.FileSystemInfo]
+  $visitedRoots = New-Object System.Collections.Generic.HashSet[string]([System.StringComparer]::OrdinalIgnoreCase)
+
+  foreach ($root in $SearchRoots) {
+    $resolvedRoot = Resolve-SearchRoot -Path $root
+    if ($null -eq $resolvedRoot -or -not $visitedRoots.Add($resolvedRoot)) {
+      continue
+    }
+
+    $stack = New-Object System.Collections.Generic.Stack[System.IO.DirectoryInfo]
+    $stack.Push([System.IO.DirectoryInfo]::new($resolvedRoot))
+
+    while ($stack.Count -gt 0) {
+      $directory = $stack.Pop()
+      if (Test-ExcludedDirectory -Directory $directory) {
+        continue
+      }
+
+      foreach ($file in Get-ChildItem -LiteralPath $directory.FullName -File -Force -Filter "*-dev.log" -ErrorAction SilentlyContinue) {
+        $targets.Add($file)
+      }
+
+      foreach ($childDirectory in Get-ChildItem -LiteralPath $directory.FullName -Directory -Force -ErrorAction SilentlyContinue) {
+        if (Test-ExcludedDirectory -Directory $childDirectory) {
+          continue
+        }
+
+        if ($childDirectory.Name -eq "__pycache__" -or $childDirectory.Name -like "*.egg-info") {
+          $targets.Add($childDirectory)
+          continue
+        }
+
+        $stack.Push($childDirectory)
+      }
+    }
+  }
+
+  return $targets
+}
+
 $fixedTargets = @(
   ".next",
   ".pytest_cache",
@@ -54,13 +132,11 @@ foreach ($target in $fixedTargets) {
   Remove-GeneratedItem -Path (Join-Path $workspaceRoot $target)
 }
 
-$patternTargets = @()
-$patternTargets += Get-ChildItem -LiteralPath $workspaceRoot -Directory -Recurse -Force -Filter "__pycache__" -ErrorAction SilentlyContinue
-$patternTargets += Get-ChildItem -LiteralPath $workspaceRoot -Directory -Recurse -Force -Filter "*.egg-info" -ErrorAction SilentlyContinue
-$patternTargets += Get-ChildItem -LiteralPath $workspaceRoot -File -Recurse -Force -Filter "*-dev.log" -ErrorAction SilentlyContinue
+$patternTargets = Get-GeneratedPatternTargets
 
 foreach ($item in $patternTargets) {
   Remove-GeneratedItem -Path $item.FullName
 }
 
+Write-Host "Skipped directories: $($ExcludeDirectories -join ', ')"
 Write-Host "Generated artifact cleanup completed."
