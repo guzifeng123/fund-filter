@@ -1,0 +1,16 @@
+.next/
+node_modules/
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.playwright-cli/
+dist/
+coverage/
+output/playwright/
+.env
+.env.local
+*.pyc
+*-dev.log
+*.egg-info/

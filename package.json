@@ -1,0 +1,17 @@
+{
+  "name": "fund-analysis-workspace",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "packages/contracts"
+  ],
+  "scripts": {
+    "dev:web": "npm.cmd --workspace apps/web run dev",
+    "build:web": "npm.cmd --workspace apps/web run build",
+    "lint:web": "npm.cmd --workspace apps/web run lint",
+    "test:web": "npm.cmd --workspace apps/web run test",
+    "dev:api": "python -m uvicorn app.main:app --app-dir apps/api --reload --host 0.0.0.0 --port 8000",
+    "test:api": "pytest apps/api/app/tests",
+    "export:openapi": "python scripts/export_openapi.py"
+  }
+}

@@ -1,0 +1,33 @@
+[project]
+name = "fund-analysis-api"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "apscheduler>=3.11.1",
+  "alembic>=1.17.2",
+  "fastapi>=0.124.4",
+  "pydantic==2.12.3",
+  "psycopg[binary]>=3.3.2",
+  "python-dotenv>=1.2.1",
+  "sqlalchemy>=2.0.45",
+  "uvicorn[standard]>=0.38.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28.1",
+  "mypy>=1.19.1",
+  "pytest>=9.0.2",
+  "ruff>=0.14.9"
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
