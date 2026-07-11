@@ -11,6 +11,7 @@ coverage/
 output/playwright/
 output/smoke/
 output/checks/
+output/release-artifacts/
 .env
 .env.local
 *.pyc

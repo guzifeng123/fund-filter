@@ -180,6 +180,7 @@ npm.cmd run build:web
 .\scripts\check-all.ps1
 .\scripts\check-all.ps1 -CheckOpenApiDrift
 .\scripts\check-all.ps1 -CheckOpenApiDrift -OpenApiDiffPath ".\output\checks\openapi.diff"
+.\scripts\collect-artifacts.ps1
 ```
 
 ## 常见失败排查
