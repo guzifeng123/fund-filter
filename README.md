@@ -181,6 +181,7 @@ npm.cmd run build:web
 .\scripts\check-all.ps1 -CheckOpenApiDrift
 .\scripts\check-all.ps1 -CheckOpenApiDrift -OpenApiDiffPath ".\output\checks\openapi.diff"
 .\scripts\collect-artifacts.ps1
+.\scripts\collect-artifacts.ps1 -RequireArtifacts "output/checks/openapi.diff","output/smoke/*.json","output/playwright/*.png"
 ```
 
 ## 常见失败排查

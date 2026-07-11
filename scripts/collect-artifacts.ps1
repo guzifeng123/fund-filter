@@ -2,6 +2,7 @@ param(
   [string[]]$SourcePaths = @("output/checks", "output/smoke", "output/playwright"),
   [string]$OutputDir = "output/release-artifacts",
   [string]$RunName = "",
+  [string[]]$RequireArtifacts = @(),
   [switch]$WhatIf
 )
 
@@ -21,6 +22,7 @@ $resolvedRunDirectory = Join-Path $resolvedOutputRoot $runDirectoryName
 $artifactExtensions = @(".json", ".diff", ".txt", ".log", ".png", ".jpg", ".jpeg", ".webp", ".zip", ".html")
 $collectedArtifacts = @()
 $skippedSources = @()
+$missingRequiredArtifacts = @()
 
 function Resolve-WorkspacePath {
   param(
@@ -75,6 +77,33 @@ function Convert-ToRelativePath {
   return [System.IO.Path]::GetRelativePath($workspaceRoot, $Path)
 }
 
+function Convert-ToArtifactPath {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path
+  )
+
+  return $Path.Replace("\", "/")
+}
+
+function Test-ArtifactPattern {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Pattern,
+    [Parameter(Mandatory = $true)]
+    [string[]]$Artifacts
+  )
+
+  $normalizedPattern = Convert-ToArtifactPath -Path $Pattern
+  foreach ($artifact in $Artifacts) {
+    if ($artifact -like $normalizedPattern) {
+      return $true
+    }
+  }
+
+  return $false
+}
+
 if (-not $WhatIf) {
   New-Item -ItemType Directory -Force -Path $resolvedRunDirectory | Out-Null
 }
@@ -122,9 +151,17 @@ foreach ($source in $SourcePaths) {
 }
 
 $finishedAt = Get-Date
+$artifactSources = @($collectedArtifacts | ForEach-Object { Convert-ToArtifactPath -Path $_.source })
+foreach ($requiredArtifact in $RequireArtifacts) {
+  if (-not (Test-ArtifactPattern -Pattern $requiredArtifact -Artifacts $artifactSources)) {
+    $missingRequiredArtifacts += $requiredArtifact
+  }
+}
+
+$ok = @($missingRequiredArtifacts).Count -eq 0
 $manifest = [ordered]@{
   schema_version = 1
-  ok = $true
+  ok = $ok
   what_if = [bool]$WhatIf
   started_at = $startedAt.ToUniversalTime().ToString("o")
   finished_at = $finishedAt.ToUniversalTime().ToString("o")
@@ -134,6 +171,8 @@ $manifest = [ordered]@{
   output_directory = $resolvedRunDirectory
   source_paths = @($SourcePaths)
   skipped_sources = @($skippedSources)
+  required_artifacts = @($RequireArtifacts)
+  missing_required_artifacts = @($missingRequiredArtifacts)
   artifact_count = @($collectedArtifacts).Count
   artifacts = @($collectedArtifacts)
 }
@@ -142,6 +181,10 @@ if (-not $WhatIf) {
   $manifestPath = Join-Path $resolvedRunDirectory "manifest.json"
   $manifest | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $manifestPath -Encoding utf8
   Write-Host "Artifact manifest completed: $manifestPath"
+}
+
+if (-not $ok) {
+  throw "Missing required artifacts: $($missingRequiredArtifacts -join ', ')"
 }
 
 Write-Host "Artifact collection completed. Count: $($manifest.artifact_count)"
