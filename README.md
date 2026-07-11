@@ -112,7 +112,13 @@ API 启动后可用 PowerShell 验证：
 .\scripts\smoke-api.ps1 -ApiBase "http://localhost:8000"
 ```
 
-脚本当前会验证 `/health`、`/api/data/status` 和 `/api/funds/filter` 的基础 envelope。也可以手动执行同等请求：
+发布或 CI 留档时，可以要求数据新鲜、空库时自动 seed，并输出 JSON 报告：
+
+```powershell
+.\scripts\smoke-api.ps1 -SeedIfEmpty -RequireFresh -JsonReportPath ".\output\smoke\api-smoke.json"
+```
+
+脚本当前会验证 `/health`、`/api/data/status` 和 `/api/funds/filter` 的基础 envelope。`-RequireFresh` 会要求数据状态为 `fresh`，`-JsonReportPath` 会记录每一步耗时、成功/失败状态和数据摘要。也可以手动执行同等请求：
 
 ```powershell
 Invoke-RestMethod http://localhost:8000/health

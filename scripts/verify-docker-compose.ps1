@@ -53,7 +53,11 @@ try {
   docker compose up --build -d
   Wait-HttpOk -Url "$ApiBase/health" -Timeout $TimeoutSeconds
   Wait-HttpOk -Url $WebBase -Timeout $TimeoutSeconds
-  .\scripts\smoke-api.ps1 -ApiBase $ApiBase
+  .\scripts\smoke-api.ps1 `
+    -ApiBase $ApiBase `
+    -SeedIfEmpty `
+    -RequireFresh `
+    -JsonReportPath "output/smoke/docker-compose-api-smoke.json"
   Write-Host "Docker Compose verification completed."
 }
 finally {
