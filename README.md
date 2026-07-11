@@ -63,6 +63,7 @@ docker compose up -d postgres
 .\scripts\db-migrate.ps1
 .\scripts\db-migrate.ps1 -DatabaseUrl "postgresql+psycopg://fund_user:fund_pass@localhost:5432/fund_app"
 .\scripts\db-migrate.ps1 -Command current -DryRun
+.\scripts\db-migrate.ps1 -Command current -DryRun -JsonReportPath ".\output\checks\migration-report.json"
 ```
 
 等价手动命令：
