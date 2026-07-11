@@ -61,6 +61,8 @@ docker compose up -d postgres
 
 ```powershell
 .\scripts\db-migrate.ps1
+.\scripts\db-migrate.ps1 -DatabaseUrl "postgresql+psycopg://fund_user:fund_pass@localhost:5432/fund_app"
+.\scripts\db-migrate.ps1 -Command current -DryRun
 ```
 
 等价手动命令：
