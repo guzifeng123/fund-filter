@@ -9,7 +9,47 @@ $ErrorActionPreference = "Stop"
 
 $workspaceRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $scriptStartedAt = Get-Date
+
+function Invoke-OptionalCommand {
+  param(
+    [Parameter(Mandatory = $true)]
+    [scriptblock]$Command
+  )
+
+  try {
+    $value = & $Command
+    if ($LASTEXITCODE -ne 0) {
+      return $null
+    }
+    return ($value | Select-Object -First 1)
+  }
+  catch {
+    return $null
+  }
+}
+
+function Get-SmokeEnvironment {
+  $openApiPath = Join-Path $workspaceRoot "packages\contracts\openapi.json"
+  $openApiHash = if (Test-Path -LiteralPath $openApiPath) {
+    (Get-FileHash -Algorithm SHA256 -LiteralPath $openApiPath).Hash
+  }
+  else {
+    $null
+  }
+
+  return [ordered]@{
+    os = [System.Runtime.InteropServices.RuntimeInformation]::OSDescription
+    powershell_version = $PSVersionTable.PSVersion.ToString()
+    node_version = Invoke-OptionalCommand { node --version }
+    npm_version = Invoke-OptionalCommand { npm.cmd --version }
+    git_commit = Invoke-OptionalCommand { git -C $workspaceRoot rev-parse HEAD }
+    openapi_commit = Invoke-OptionalCommand { git -C $workspaceRoot log -1 --format=%H -- packages/contracts/openapi.json }
+    openapi_sha256 = $openApiHash
+  }
+}
+
 $report = [ordered]@{
+  schema_version = 1
   api_base = $ApiBase
   started_at = $scriptStartedAt.ToUniversalTime().ToString("o")
   finished_at = $null
@@ -17,6 +57,7 @@ $report = [ordered]@{
   seed_if_empty = [bool]$SeedIfEmpty
   require_fresh = [bool]$RequireFresh
   ok = $false
+  environment = Get-SmokeEnvironment
   steps = @()
   summary = [ordered]@{}
 }
