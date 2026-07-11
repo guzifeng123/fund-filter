@@ -1,4 +1,6 @@
 param(
+  [ValidateSet("", "local-release")]
+  [string]$Profile = "",
   [string[]]$SourcePaths = @("output/checks", "output/smoke", "output/playwright"),
   [string]$OutputDir = "output/release-artifacts",
   [string]$RunName = "",
@@ -11,6 +13,16 @@ $ErrorActionPreference = "Stop"
 $workspaceRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $startedAt = Get-Date
 $stamp = $startedAt.ToString("yyyyMMdd-HHmmss")
+
+if ($Profile -eq "local-release") {
+  if (-not $PSBoundParameters.ContainsKey("SourcePaths")) {
+    $SourcePaths = @("output/checks", "output/smoke", "output/playwright")
+  }
+  if (-not $PSBoundParameters.ContainsKey("RequireArtifacts")) {
+    $RequireArtifacts = @("output/checks/openapi.diff", "output/smoke/*.json", "output/playwright/*.png")
+  }
+}
+
 $resolvedOutputRoot = if ([System.IO.Path]::IsPathRooted($OutputDir)) {
   $OutputDir
 }
@@ -169,6 +181,7 @@ $manifest = [ordered]@{
   workspace_root = $workspaceRoot
   git_commit = Get-OptionalCommandValue { git -C $workspaceRoot rev-parse HEAD }
   output_directory = $resolvedRunDirectory
+  profile = $Profile
   source_paths = @($SourcePaths)
   skipped_sources = @($skippedSources)
   required_artifacts = @($RequireArtifacts)
