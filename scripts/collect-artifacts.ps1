@@ -137,8 +137,59 @@ function Write-ArtifactSummary {
     [string]$Path
   )
 
+  function Get-ArtifactCategory {
+    param(
+      [Parameter(Mandatory = $true)]
+      [string]$Source
+    )
+
+    $normalized = Convert-ToArtifactPath -Path $Source
+    if ($normalized -like "*smoke*") { return "smoke" }
+    if ($normalized -like "*openapi*" -or $normalized -like "*.diff") { return "openapi" }
+    if ($normalized -like "*backup*") { return "backup" }
+    if ($normalized -like "*migration*") { return "migration" }
+    if ($normalized -like "*cleanup*") { return "cleanup" }
+    if ($normalized -like "*playwright*" -or $normalized -match "\.(png|jpg|jpeg|webp)$") { return "visual" }
+    return "other"
+  }
+
+  function Get-ArtifactOk {
+    param(
+      [Parameter(Mandatory = $true)]
+      [object]$Artifact
+    )
+
+    if ($Artifact.source -notlike "*.json") {
+      return $null
+    }
+
+    $artifactPath = Resolve-WorkspacePath -Path $Artifact.destination
+    if (-not (Test-Path -LiteralPath $artifactPath)) {
+      return $null
+    }
+
+    try {
+      $json = Get-Content -LiteralPath $artifactPath -Raw | ConvertFrom-Json
+      if ($null -ne $json.ok) {
+        return [bool]$json.ok
+      }
+    }
+    catch {
+      return $null
+    }
+
+    return $null
+  }
+
   $lines = New-Object System.Collections.Generic.List[string]
   $status = if ($Manifest.ok) { "OK" } else { "FAILED" }
+  $categoryRows = @($Manifest.artifacts | ForEach-Object {
+    [pscustomobject]@{
+      Category = Get-ArtifactCategory -Source $_.source
+      Artifact = $_
+      Ok = Get-ArtifactOk -Artifact $_
+    }
+  })
   $lines.Add("# Release Artifact Summary")
   $lines.Add("")
   $lines.Add("- Status: $status")
@@ -159,13 +210,32 @@ function Write-ArtifactSummary {
     $lines.Add("")
   }
 
+  $lines.Add("## Category Summary")
+  $lines.Add("")
+  $lines.Add("| Category | Count | OK | Failed | Unknown |")
+  $lines.Add("| --- | ---: | ---: | ---: | ---: |")
+  foreach ($group in ($categoryRows | Group-Object Category | Sort-Object Name)) {
+    $okCount = @($group.Group | Where-Object { $_.Ok -eq $true }).Count
+    $failedCount = @($group.Group | Where-Object { $_.Ok -eq $false }).Count
+    $unknownCount = @($group.Group | Where-Object { $null -eq $_.Ok }).Count
+    $lines.Add("| $(Format-MarkdownCell $group.Name) | $($group.Count) | $okCount | $failedCount | $unknownCount |")
+  }
+  $lines.Add("")
+
   $lines.Add("## Artifacts")
   $lines.Add("")
-  $lines.Add("| Source | Size bytes | SHA256 |")
-  $lines.Add("| --- | ---: | --- |")
-  foreach ($artifact in $Manifest.artifacts) {
-    $source = Convert-ToArtifactPath -Path $artifact.source
-    $lines.Add("| $(Format-MarkdownCell $source) | $(Format-MarkdownCell $artifact.size_bytes) | ``$(Format-MarkdownCell $artifact.sha256)`` |")
+  foreach ($group in ($categoryRows | Group-Object Category | Sort-Object Name)) {
+    $lines.Add("### $(Format-MarkdownCell $group.Name)")
+    $lines.Add("")
+    $lines.Add("| Source | OK | Size bytes | SHA256 |")
+    $lines.Add("| --- | --- | ---: | --- |")
+    foreach ($row in $group.Group) {
+      $artifact = $row.Artifact
+      $source = Convert-ToArtifactPath -Path $artifact.source
+      $okValue = if ($null -eq $row.Ok) { "n/a" } elseif ($row.Ok) { "true" } else { "false" }
+      $lines.Add("| $(Format-MarkdownCell $source) | $okValue | $(Format-MarkdownCell $artifact.size_bytes) | ``$(Format-MarkdownCell $artifact.sha256)`` |")
+    }
+    $lines.Add("")
   }
 
   $lines | Set-Content -LiteralPath $Path -Encoding utf8
