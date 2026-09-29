@@ -3,30 +3,25 @@
   "contract_path": "packages/contracts/openapi.json",
   "baseline": {
     "git_ref": "HEAD",
-    "contract_blob": "51d24bd3b02c9e3d7deebcf6f4007d63e1649df7"
+    "contract_blob": "e8ebbd8074c36186607d35b74a82dc62ab2931e3"
   },
-  "approved_export_sha256": "c95065828e04d079a0f25cc09991123607ac37c2991dbed8f4def7c261c5697c",
-  "approved_diff_sha256": "62686e69243936c7bf20d5a15bb465cb81610b75c240402bb5a4ff679a7ff1ba",
-  "approved_summary_sha256": "f623166e0624d1f2048dcb36fa7af5701738b62ce200748592f3d4007c4eea54",
+  "approved_export_sha256": "96118579879680540b3cabcb123d2cac3592a39aad7ffa7075f44816dd348559",
+  "approved_diff_sha256": "ecf5260d0ad25cf91f19dbe23fcc394cb82d93d61f97a3d7276060e6566763e7",
+  "approved_summary_sha256": "c56bb99f4a9f22be84d01c480cf9a1055bb6b0e5c8d41dec4cf47dbcf02af7e8",
   "breaking_hints_reviewed": true,
   "review": {
     "reviewed_on": "2026-09-29",
-    "reviewer": "release-review",
-    "reason": "Accept the generated concrete response schemas, new operations and documented validation/error response changes. Adds the read-only data-source health probe."
+    "reviewer": "organizer-integration",
+    "reason": "Integrated B2+B4 additive, read-only endpoints: GET /api/data/quality (NAV-series/profile quality summary; DataQualityReport/DataQualityIssue) and GET /api/data/sources/health (upstream reachability/latency probe; DataSourceHealthReport/EndpointHealth). Diff vs pre-feature baseline 7d34065 adds exactly 2 operations and 6 schemas with zero breaking hints; no existing operation, field, constraint, response code, or required parameter changed."
   },
   "change_list": {
     "operations_added": [
-      "GET /api/data/scheduler/status",
-      "GET /api/settings/runtime",
-      "POST /api/portfolios/{portfolio_id}/positions/normalize",
+      "GET /api/data/quality",
       "GET /api/data/sources/health"
     ],
-    "schema_fields_added": ["FundFilterRequest.keyword"],
-    "constraints_tightened": [
-      "BacktestRequest.amount: exclusiveMinimum increased from unset to 0",
-      "FundCompareRequest.codes: minItems increased from 1 to 2"
-    ],
-    "response_codes_added": 16,
-    "schemas_added": 62
+    "schema_fields_added": [],
+    "constraints_tightened": [],
+    "response_codes_added": 0,
+    "schemas_added": 6
   }
 }
