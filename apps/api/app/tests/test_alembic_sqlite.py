@@ -44,5 +44,5 @@ def test_sqlite_database_upgrades_from_empty_to_head(tmp_path: Path) -> None:
     }.issubset(inspect(engine).get_table_names())
     with engine.connect() as connection:
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-            "0009_add_llm_provider_events"
+            "0010_add_fund_nav_generation_point_unique"
         )

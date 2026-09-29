@@ -349,6 +349,9 @@ def test_staged_count_mismatch_rolls_back_without_changing_active_rows(
     candidate = [fund.model_copy(deep=True) for fund in FUNDS[:2]]
     source = SnapshotSourceStub(candidate)
     _install_source(monkeypatch, source)
+    # This patch targets the per-point upsert loop; force that path so the
+    # deliberate missing metric reaches validate_staged_snapshot.
+    monkeypatch.setattr(settings, "fund_write_batch_enabled", False)
 
     def omit_one_metric(
         db: Session,
