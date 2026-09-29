@@ -8,7 +8,13 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.nav_quality import NavQualityWarningPayload
-from app.core.snapshot_quality import SnapshotQualityThresholds, validate_snapshot_quality
+from app.core.nav_series_quality import assess_nav_series_quality
+from app.core.profile_quality import assess_profile_quality
+from app.core.snapshot_quality import (
+    SnapshotQualityError,
+    SnapshotQualityThresholds,
+    validate_snapshot_quality,
+)
 from app.data_sources.base import FundDataSource
 from app.data_sources import get_fund_data_source
 from app.db.models import FundDataSnapshot, JobRun, JsonObject
@@ -143,6 +149,25 @@ def _run_atomic_snapshot_job(
             source_name=source.name,
             previous_fund_count=previous_fund_count,
         )
+        # B2: per-fund NAV series + profile field quality gate, at the same layer
+        # as validate_snapshot_quality (fetch done, staging not yet). Structural
+        # errors reject the candidate generation so the previous generation keeps
+        # serving; warnings flow into the existing quality_warnings contract.
+        series_report = assess_nav_series_quality(funds, source_name=source.name)
+        profile_report = assess_profile_quality(funds, source_name=source.name)
+        if (series_report.errors and settings.fund_nav_series_reject_errors) or (
+            profile_report.errors and settings.fund_profile_reject_errors
+        ):
+            first_error = series_report.errors[0] if series_report.errors else profile_report.errors[0]
+            raise SnapshotQualityError(
+                "snapshot rejected by NAV series/profile quality gate: "
+                f"{first_error.code} on fund {first_error.fund_code}: "
+                f"{first_error.message}"
+            )
+        pre_stage_warnings: list[NavQualityWarningPayload] = [
+            issue.as_payload() for issue in series_report.warnings
+        ]
+        pre_stage_warnings.extend(issue.as_payload() for issue in profile_report.warnings)
         nav_count = sum(len(fund.navs) for fund in funds)
         snapshot = stage_snapshot(
             db,
@@ -176,15 +201,16 @@ def _run_atomic_snapshot_job(
             "updated_count": len(funds),
             "snapshot_quality_thresholds": _thresholds_json(quality_thresholds),
         }
-        if quality_warnings:
+        quality_warning_payloads = [*pre_stage_warnings, *quality_warnings]
+        if quality_warning_payloads:
             details.update(
                 {
-                    "quality_warning_count": len(quality_warnings),
+                    "quality_warning_count": len(quality_warning_payloads),
                     "quality_warnings": [
                         _warning_json(warning)
-                        for warning in quality_warnings[:NAV_WARNING_DETAIL_LIMIT]
+                        for warning in quality_warning_payloads[:NAV_WARNING_DETAIL_LIMIT]
                     ],
-                    "quality_warnings_truncated": len(quality_warnings)
+                    "quality_warnings_truncated": len(quality_warning_payloads)
                     > NAV_WARNING_DETAIL_LIMIT,
                 }
             )
