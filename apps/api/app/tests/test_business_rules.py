@@ -159,12 +159,20 @@ def test_seed_sample_data_can_refresh_sample_freshness_for_smoke(
         now=refreshed_at,
     )
 
-    status = get_data_status(db_session)
+    fresh_status = get_data_status(db_session, now=refreshed_at)
 
-    assert status.fund_count == 4
-    assert status.nav_count == 24
-    assert status.latest_data_updated_at in {refreshed_at.isoformat(), refreshed_at.replace(tzinfo=None).isoformat()}
-    assert status.freshness_status == "fresh"
+    assert fresh_status.fund_count == 4
+    assert fresh_status.nav_count == 24
+    assert fresh_status.latest_data_updated_at in {
+        refreshed_at.isoformat(),
+        refreshed_at.replace(tzinfo=None).isoformat(),
+    }
+    assert fresh_status.freshness_status == "fresh"
+
+    stale_status = get_data_status(
+        db_session, now=refreshed_at + timedelta(days=settings.fund_data_stale_days + 1)
+    )
+    assert stale_status.freshness_status == "stale"
 
 
 def test_sample_data_source_sync_jobs_are_idempotent_and_record_job_runs(

@@ -33,6 +33,7 @@ def _freshness_status(
     nav_count: int,
     latest_data_updated_at: datetime | None,
     last_job_row: JobRun | None,
+    now: datetime | None = None,
 ) -> DataFreshnessStatus:
     if fund_count == 0 or nav_count == 0 or latest_data_updated_at is None:
         return "empty"
@@ -41,7 +42,10 @@ def _freshness_status(
     latest = latest_data_updated_at
     if latest.tzinfo is None:
         latest = latest.replace(tzinfo=timezone.utc)
-    age_days = (datetime.now(timezone.utc) - latest.astimezone(timezone.utc)).days
+    reference_now = now or datetime.now(timezone.utc)
+    if reference_now.tzinfo is None:
+        reference_now = reference_now.replace(tzinfo=timezone.utc)
+    age_days = (reference_now.astimezone(timezone.utc) - latest.astimezone(timezone.utc)).days
     if age_days > settings.fund_data_stale_days:
         return "stale"
     return "fresh"
@@ -68,7 +72,7 @@ def _to_job_summary(row: JobRun) -> JobRunSummary:
     )
 
 
-def get_data_status(db: Session) -> DataStatus:
+def get_data_status(db: Session, now: datetime | None = None) -> DataStatus:
     db.execute(text("SELECT 1"))
     generation_id = active_snapshot_generation_expression()
     fund_count = db.scalar(
@@ -94,7 +98,9 @@ def get_data_status(db: Session) -> DataStatus:
         fund_count=fund_count,
         nav_count=nav_count,
         latest_data_updated_at=latest_data_updated_at.isoformat() if latest_data_updated_at else None,
-        freshness_status=_freshness_status(fund_count, nav_count, latest_data_updated_at, last_job_row),
+        freshness_status=_freshness_status(
+            fund_count, nav_count, latest_data_updated_at, last_job_row, now
+        ),
         stale_after_days=settings.fund_data_stale_days,
         last_job=last_job,
     )
