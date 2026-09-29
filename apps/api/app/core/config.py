@@ -562,5 +562,25 @@ class Settings:
             positive_float_fields=("management_fee_max", "custody_fee_max"),
         )
 
+        # B3 conservative write enhancement: batched staging writes, old-generation
+        # file archiving, and archive retention pruning. Purely additive; the
+        # per-point write path remains available as a rollback switch.
+        self.fund_write_batch_enabled = _strict_boolean("FUND_WRITE_BATCH_ENABLED", "true")
+        self.fund_write_batch_size = _positive_integer(
+            "FUND_WRITE_BATCH_SIZE",
+            "100",
+            maximum=10_000_000,
+        )
+        self.fund_archive_enabled = _strict_boolean("FUND_ARCHIVE_ENABLED", "true")
+        default_fund_archive_dir = (Path(__file__).resolve().parents[4] / "output" / "archives")
+        self.fund_archive_dir = Path(
+            os.getenv("FUND_ARCHIVE_DIR", default_fund_archive_dir.as_posix())
+        )
+        self.fund_archive_keep_generations = _non_negative_integer(
+            "FUND_ARCHIVE_KEEP_GENERATIONS",
+            "0",
+            maximum=10_000,
+        )
+
 
 settings = Settings()
