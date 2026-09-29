@@ -170,7 +170,15 @@ class Fund(Base):
 
 class FundNav(Base):
     __tablename__ = "fund_navs"
-    __table_args__ = (UniqueConstraint("fund_code", "trade_date", name="uq_fund_navs_fund_code_trade_date"),)
+    __table_args__ = (
+        UniqueConstraint("fund_code", "trade_date", name="uq_fund_navs_fund_code_trade_date"),
+        UniqueConstraint(
+            "snapshot_generation_id",
+            "fund_code",
+            "trade_date",
+            name="uq_fund_navs_generation_point",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     fund_code: Mapped[str] = mapped_column(ForeignKey("funds.code", ondelete="CASCADE"), nullable=False, index=True)

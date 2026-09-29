@@ -664,3 +664,36 @@ def upsert_fund_detail(
     db.flush()
     upsert_fund_metrics(db, fund, generation_id)
     upsert_fund_navs(db, fund, generation_id)
+
+
+def stage_funds_batch(
+    db: Session,
+    funds: list[FundDetail],
+    snapshot_generation_id: str,
+    *,
+    batch_size: int,
+) -> list[NavQualityWarningPayload]:
+    """Stage a full snapshot with batched flushes.
+
+    This is the conservative batch counterpart to the historical per-fund
+    flush loop in ``sync_fund_data``. It reuses the exact same profile / metric /
+    NAV upsert semantics (same generation assignment, same ``raw_data`` payloads
+    and the same quality warnings); the only difference is that SQLAlchemy
+    flushes the unit of work in a few large chunks instead of after every fund.
+    The passes are grouped (profiles, then metrics, then navs) so that every fund
+    row is already persistent before the metric / NAV helpers look it up again;
+    the per-point path stays available for rollback.
+    """
+    if batch_size <= 0:
+        raise ValueError("batch_size must be greater than 0")
+    for fund in funds:
+        upsert_fund_profile(db, fund, snapshot_generation_id)
+    db.flush()
+    quality_warnings: list[NavQualityWarningPayload] = []
+    for index, fund in enumerate(funds):
+        upsert_fund_metrics(db, fund, snapshot_generation_id)
+        quality_warnings.extend(upsert_fund_navs(db, fund, snapshot_generation_id))
+        if (index + 1) % batch_size == 0:
+            db.flush()
+    db.flush()
+    return quality_warnings

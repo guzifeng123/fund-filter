@@ -25,7 +25,14 @@ from app.repositories.fund_snapshots import (
     stage_snapshot,
     validate_staged_snapshot,
 )
+from app.repositories.fund_archives import (
+    GenerationArchive,
+    append_archive_details,
+    archive_generation,
+    resolve_archive_root,
+)
 from app.repositories.funds import (
+    stage_funds_batch,
     upsert_fund_metrics,
     upsert_fund_navs,
     upsert_fund_profile,
@@ -179,11 +186,30 @@ def _run_atomic_snapshot_job(
         )
 
         quality_warnings: list[NavQualityWarningPayload] = []
-        for fund in funds:
-            upsert_fund_profile(db, fund, generation_id)
-            db.flush()
-            upsert_fund_metrics(db, fund, generation_id)
-            quality_warnings.extend(upsert_fund_navs(db, fund, generation_id))
+        archive_result: GenerationArchive | None = None
+        archive_warning: str | None = None
+        if settings.fund_archive_enabled and previous_snapshot is not None:
+            try:
+                archive_result = archive_generation(
+                    db,
+                    previous_generation_id,
+                    archive_root=resolve_archive_root(settings.fund_archive_dir),
+                )
+            except Exception as exc:  # pragma: no cover - defensive by contract
+                archive_warning = f"fund archive failed: {exc}"
+        if settings.fund_write_batch_enabled:
+            quality_warnings = stage_funds_batch(
+                db,
+                funds,
+                generation_id,
+                batch_size=settings.fund_write_batch_size,
+            )
+        else:
+            for fund in funds:
+                upsert_fund_profile(db, fund, generation_id)
+                db.flush()
+                upsert_fund_metrics(db, fund, generation_id)
+                quality_warnings.extend(upsert_fund_navs(db, fund, generation_id))
         ensure_default_portfolios(db)
         validate_staged_snapshot(db, snapshot)
         promote_snapshot(db, state=state, snapshot=snapshot)
@@ -199,8 +225,13 @@ def _run_atomic_snapshot_job(
             "nav_count": nav_count,
             "metric_count": len(funds),
             "updated_count": len(funds),
+            "write_path": "batch" if settings.fund_write_batch_enabled else "per_point",
             "snapshot_quality_thresholds": _thresholds_json(quality_thresholds),
         }
+        if archive_result is not None:
+            append_archive_details(details, archive_result)
+        elif archive_warning is not None:
+            details["archive_warning"] = archive_warning
         quality_warning_payloads = [*pre_stage_warnings, *quality_warnings]
         if quality_warning_payloads:
             details.update(
