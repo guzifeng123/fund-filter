@@ -183,27 +183,6 @@
         }
       }
     },
-    "/api/data/quality": {
-      "get": {
-        "tags": [
-          "data-quality"
-        ],
-        "summary": "Data Quality",
-        "operationId": "data_quality_api_data_quality_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse_DataQualityReport_"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/funds/search": {
       "get": {
         "tags": [
@@ -1471,6 +1450,27 @@
         }
       }
     },
+    "/api/data/sources/health": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Data Sources Health",
+        "operationId": "data_sources_health_api_data_sources_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_DataSourceHealthReport_"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health",
@@ -1745,10 +1745,10 @@
         ],
         "title": "ApiResponse[DashboardData]"
       },
-      "ApiResponse_DataQualityReport_": {
+      "ApiResponse_DataSourceHealthReport_": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/DataQualityReport"
+            "$ref": "#/components/schemas/DataSourceHealthReport"
           },
           "meta": {
             "$ref": "#/components/schemas/ApiMeta"
@@ -1759,7 +1759,7 @@
           "data",
           "meta"
         ],
-        "title": "ApiResponse[DataQualityReport]"
+        "title": "ApiResponse[DataSourceHealthReport]"
       },
       "ApiResponse_DataStatus_": {
         "properties": {
@@ -2442,195 +2442,57 @@
         ],
         "title": "DashboardData"
       },
-      "DataQualityIssue": {
+      "DataSourceHealthReport": {
         "properties": {
-          "code": {
-            "type": "string",
-            "title": "Code"
-          },
-          "fund_code": {
-            "type": "string",
-            "title": "Fund Code"
-          },
-          "trade_date": {
-            "type": "string",
-            "title": "Trade Date"
-          },
-          "field": {
-            "type": "string",
-            "title": "Field"
-          },
-          "message": {
-            "type": "string",
-            "title": "Message"
-          },
-          "value": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Value"
-          },
-          "minimum": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Minimum"
-          },
-          "maximum": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Maximum"
-          }
-        },
-        "type": "object",
-        "required": [
-          "code",
-          "fund_code",
-          "trade_date",
-          "field",
-          "message"
-        ],
-        "title": "DataQualityIssue"
-      },
-      "DataQualityReport": {
-        "properties": {
-          "threshold_version": {
-            "type": "string",
-            "title": "Threshold Version"
-          },
           "source": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
             "title": "Source"
           },
-          "snapshot_generation_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Snapshot Generation Id"
-          },
-          "previous_snapshot_generation_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Previous Snapshot Generation Id"
-          },
-          "job_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Job Name"
-          },
-          "job_status": {
+          "checked_at": {
             "type": "string",
-            "enum": [
-              "running",
-              "success",
-              "failed"
-            ],
-            "title": "Job Status"
+            "title": "Checked At"
           },
-          "started_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Started At"
+          "overall_reachable": {
+            "type": "boolean",
+            "title": "Overall Reachable"
           },
-          "finished_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Finished At"
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
           },
-          "issue_count": {
-            "type": "integer",
-            "title": "Issue Count"
-          },
-          "issue_codes": {
-            "additionalProperties": {
-              "type": "integer"
+          "endpoints": {
+            "items": {
+              "$ref": "#/components/schemas/EndpointHealth"
             },
-            "type": "object",
-            "title": "Issue Codes"
+            "type": "array",
+            "title": "Endpoints"
           },
-          "funds_with_issues": {
+          "configured_fund_codes": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Funds With Issues"
+            "title": "Configured Fund Codes"
           },
-          "issues": {
+          "discovery_enabled": {
+            "type": "boolean",
+            "title": "Discovery Enabled",
+            "default": false
+          },
+          "discovery_limit": {
+            "type": "integer",
+            "title": "Discovery Limit",
+            "default": 0
+          },
+          "skipped": {
             "items": {
-              "$ref": "#/components/schemas/DataQualityIssue"
+              "additionalProperties": true,
+              "type": "object"
             },
             "type": "array",
-            "title": "Issues"
+            "title": "Skipped"
           },
-          "issues_truncated": {
-            "type": "boolean",
-            "title": "Issues Truncated"
-          },
-          "snapshot_quality_thresholds": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Snapshot Quality Thresholds"
-          },
-          "error": {
+          "note": {
             "anyOf": [
               {
                 "type": "string"
@@ -2639,26 +2501,19 @@
                 "type": "null"
               }
             ],
-            "title": "Error"
+            "title": "Note"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
-          "threshold_version",
           "source",
-          "snapshot_generation_id",
-          "previous_snapshot_generation_id",
-          "job_name",
-          "job_status",
-          "started_at",
-          "finished_at",
-          "issue_count",
-          "issue_codes",
-          "funds_with_issues",
-          "issues",
-          "issues_truncated"
+          "checked_at",
+          "overall_reachable",
+          "enabled"
         ],
-        "title": "DataQualityReport"
+        "title": "DataSourceHealthReport",
+        "description": "Result of a minimal, rate-limited upstream probe. Never writes to the database."
       },
       "DataStatus": {
         "properties": {
@@ -2752,6 +2607,53 @@
           "result"
         ],
         "title": "DataSyncResult"
+      },
+      "EndpointHealth": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "reachable": {
+            "type": "boolean",
+            "title": "Reachable"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "url",
+          "reachable"
+        ],
+        "title": "EndpointHealth",
+        "description": "Reachability of a single upstream Eastmoney endpoint used by the direct adapter."
       },
       "FeeSummary": {
         "properties": {

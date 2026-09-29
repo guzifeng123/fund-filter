@@ -245,6 +245,12 @@ def _run_atomic_snapshot_job(
                     > NAV_WARNING_DETAIL_LIMIT,
                 }
             )
+        # Optional: adapters such as eastmoney_direct publish an incremental/full
+        # pull report (mode, per-fund nav fetch mode, skipped discovery). This is
+        # purely additive and ignored by sources that do not set the attribute.
+        incremental_report = getattr(source, "last_run_report", None)
+        if isinstance(incremental_report, dict) and incremental_report:
+            details["source_run_report"] = incremental_report
         return details
 
     return _run_job(db, job_name, task)
