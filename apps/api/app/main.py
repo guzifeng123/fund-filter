@@ -12,7 +12,17 @@ from app.core.compliance import error_envelope
 from app.core.config import settings
 from app.jobs.scheduler import start_scheduler, stop_scheduler
 from app.repositories.llm_observability import shutdown_default_llm_event_dispatcher
-from app.routers import ai, backtests, dashboard, data, funds, portfolios, risk_assessments, settings as settings_router
+from app.routers import (
+    ai,
+    backtests,
+    dashboard,
+    data,
+    data_quality,
+    funds,
+    portfolios,
+    risk_assessments,
+    settings as settings_router,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -43,6 +53,7 @@ app.add_middleware(
 
 app.include_router(dashboard.router, prefix="/api", tags=["dashboard"])
 app.include_router(data.router, prefix="/api", tags=["data"])
+app.include_router(data_quality.router, prefix="/api", tags=["data-quality"])
 app.include_router(funds.router, prefix="/api/funds", tags=["funds"])
 app.include_router(risk_assessments.router, prefix="/api/risk-assessments", tags=["risk"])
 app.include_router(portfolios.router, prefix="/api/portfolios", tags=["portfolios"])

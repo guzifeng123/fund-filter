@@ -156,6 +156,85 @@ def _snapshot_quality_overrides() -> dict[str, dict[str, int | float]]:
     return overrides
 
 
+def _quality_overrides(
+    variable_name: str,
+    *,
+    int_fields: tuple[str, ...],
+    rate_fields: tuple[str, ...],
+    positive_float_fields: tuple[str, ...],
+) -> dict[str, dict[str, int | float]]:
+    """Parse a source-keyed override map for B2 nav-series / profile quality gates.
+
+    The shape mirrors FUND_SNAPSHOT_QUALITY_OVERRIDES: a JSON object keyed by
+    adapter source name (for example public_http_json) or persisted fund source
+    (for example eastmoney_snapshot), mapping to a subset of allowed numeric
+    threshold fields. Unknown fields, booleans and out-of-range values are rejected.
+    """
+
+    raw_value = os.getenv(variable_name, "").strip()
+    if not raw_value:
+        return {}
+    try:
+        decoded = json.loads(raw_value)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{variable_name} must be valid JSON") from exc
+    if not isinstance(decoded, dict):
+        raise ValueError(f"{variable_name} must be a JSON object")
+    allowed_fields = set(int_fields) | set(rate_fields) | set(positive_float_fields)
+    overrides: dict[str, dict[str, int | float]] = {}
+    for raw_key, raw_config in decoded.items():
+        if not isinstance(raw_key, str) or not raw_key.strip():
+            raise ValueError(f"{variable_name} keys must be non-empty strings")
+        if not isinstance(raw_config, dict):
+            raise ValueError(f"{variable_name} values must be JSON objects")
+        unknown_fields = set(raw_config) - allowed_fields
+        if unknown_fields:
+            raise ValueError(
+                f"{variable_name} contains unsupported fields: "
+                + ", ".join(sorted(unknown_fields))
+            )
+        normalized: dict[str, int | float] = {}
+        for field_name, field_value in raw_config.items():
+            if field_name in int_fields:
+                if (
+                    not isinstance(field_value, int)
+                    or isinstance(field_value, bool)
+                    or field_value < 0
+                ):
+                    raise ValueError(
+                        f"{variable_name}.{raw_key}.{field_name} "
+                        "must be an integer greater than or equal to 0"
+                    )
+                normalized[field_name] = field_value
+            elif field_name in rate_fields:
+                if (
+                    not isinstance(field_value, int | float)
+                    or isinstance(field_value, bool)
+                    or not math.isfinite(float(field_value))
+                    or float(field_value) < 0
+                    or float(field_value) > 1
+                ):
+                    raise ValueError(
+                        f"{variable_name}.{raw_key}.{field_name} "
+                        "must be a finite number between 0 and 1"
+                    )
+                normalized[field_name] = float(field_value)
+            else:
+                if (
+                    not isinstance(field_value, int | float)
+                    or isinstance(field_value, bool)
+                    or not math.isfinite(float(field_value))
+                    or float(field_value) <= 0
+                ):
+                    raise ValueError(
+                        f"{variable_name}.{raw_key}.{field_name} "
+                        "must be a finite number greater than 0"
+                    )
+                normalized[field_name] = float(field_value)
+        overrides[raw_key.strip()] = normalized
+    return overrides
+
+
 def _strict_boolean(variable_name: str, default: str) -> bool:
     value = os.getenv(variable_name, default).strip().lower()
     if value not in {"true", "false"}:
@@ -420,6 +499,67 @@ class Settings:
         self.llm_alert_timeout_seconds = _positive_finite_float(
             "LLM_ALERT_TIMEOUT_SECONDS",
             "2",
+        )
+        # --- B2: NAV series invariant + profile field quality gates -------------
+        # Defaults stay loose so bundled sample fixtures stay green; real sources
+        # can tighten them (and override per source via the *_OVERRIDES JSON map).
+        # max_gap_days=0 disables the calendar-day gap/stale warning entirely.
+        self.fund_nav_series_max_gap_days = _non_negative_integer(
+            "FUND_NAV_SERIES_MAX_GAP_DAYS",
+            "0",
+        )
+        # |day-over-day unit NAV change| above this ratio is a warning unless the
+        # accumulated NAV moved in lock-step (i.e. a dividend ex-date, not a jump).
+        self.fund_nav_series_max_single_day_change = _non_negative_rate_threshold(
+            "FUND_NAV_SERIES_MAX_SINGLE_DAY_CHANGE",
+            "0.5",
+        )
+        # Accumulated NAV (复权口径) should be non-decreasing; this is the small
+        # rounding tolerance allowed before a decrease is flagged.
+        self.fund_nav_series_accumulated_decrease_tolerance = _non_negative_rate_threshold(
+            "FUND_NAV_SERIES_ACCUMULATED_DECREASE_TOLERANCE",
+            "0.001",
+        )
+        self.fund_nav_series_reject_errors = _strict_boolean(
+            "FUND_NAV_SERIES_REJECT_ERRORS",
+            "true",
+        )
+        self.fund_nav_series_quality_overrides = _quality_overrides(
+            "FUND_NAV_SERIES_QUALITY_OVERRIDES",
+            int_fields=("max_gap_days",),
+            rate_fields=("max_single_day_change", "accumulated_decrease_tolerance"),
+            positive_float_fields=(),
+        )
+        # Profile field sanity ranges (fees are stored as percentage points).
+        self.fund_profile_management_fee_max = _positive_finite_float(
+            "FUND_PROFILE_MANAGEMENT_FEE_MAX",
+            "3.0",
+        )
+        self.fund_profile_custody_fee_max = _positive_finite_float(
+            "FUND_PROFILE_CUSTODY_FEE_MAX",
+            "1.0",
+        )
+        # 0 disables the "claimed 3y/5y return but NAV history too short" check.
+        self.fund_profile_min_history_years_for_3y = _non_negative_integer(
+            "FUND_PROFILE_MIN_HISTORY_YEARS_FOR_3Y",
+            "0",
+        )
+        self.fund_profile_min_history_years_for_5y = _non_negative_integer(
+            "FUND_PROFILE_MIN_HISTORY_YEARS_FOR_5Y",
+            "0",
+        )
+        self.fund_profile_reject_errors = _strict_boolean(
+            "FUND_PROFILE_REJECT_ERRORS",
+            "false",
+        )
+        self.fund_profile_quality_overrides = _quality_overrides(
+            "FUND_PROFILE_QUALITY_OVERRIDES",
+            int_fields=(
+                "min_history_years_for_3y",
+                "min_history_years_for_5y",
+            ),
+            rate_fields=(),
+            positive_float_fields=("management_fee_max", "custody_fee_max"),
         )
 
 

@@ -183,6 +183,27 @@
         }
       }
     },
+    "/api/data/quality": {
+      "get": {
+        "tags": [
+          "data-quality"
+        ],
+        "summary": "Data Quality",
+        "operationId": "data_quality_api_data_quality_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_DataQualityReport_"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/funds/search": {
       "get": {
         "tags": [
@@ -1724,6 +1745,22 @@
         ],
         "title": "ApiResponse[DashboardData]"
       },
+      "ApiResponse_DataQualityReport_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DataQualityReport"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[DataQualityReport]"
+      },
       "ApiResponse_DataStatus_": {
         "properties": {
           "data": {
@@ -2404,6 +2441,224 @@
           "recent_job"
         ],
         "title": "DashboardData"
+      },
+      "DataQualityIssue": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "fund_code": {
+            "type": "string",
+            "title": "Fund Code"
+          },
+          "trade_date": {
+            "type": "string",
+            "title": "Trade Date"
+          },
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "fund_code",
+          "trade_date",
+          "field",
+          "message"
+        ],
+        "title": "DataQualityIssue"
+      },
+      "DataQualityReport": {
+        "properties": {
+          "threshold_version": {
+            "type": "string",
+            "title": "Threshold Version"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "snapshot_generation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Generation Id"
+          },
+          "previous_snapshot_generation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Snapshot Generation Id"
+          },
+          "job_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Name"
+          },
+          "job_status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "success",
+              "failed"
+            ],
+            "title": "Job Status"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "issue_count": {
+            "type": "integer",
+            "title": "Issue Count"
+          },
+          "issue_codes": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Issue Codes"
+          },
+          "funds_with_issues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Funds With Issues"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/DataQualityIssue"
+            },
+            "type": "array",
+            "title": "Issues"
+          },
+          "issues_truncated": {
+            "type": "boolean",
+            "title": "Issues Truncated"
+          },
+          "snapshot_quality_thresholds": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Quality Thresholds"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "threshold_version",
+          "source",
+          "snapshot_generation_id",
+          "previous_snapshot_generation_id",
+          "job_name",
+          "job_status",
+          "started_at",
+          "finished_at",
+          "issue_count",
+          "issue_codes",
+          "funds_with_issues",
+          "issues",
+          "issues_truncated"
+        ],
+        "title": "DataQualityReport"
       },
       "DataStatus": {
         "properties": {
