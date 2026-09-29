@@ -1,0 +1,6 @@
+{
+  "navs": [
+    { "trade_date": "2021-05-25", "nav": 1.453, "accumulated_nav": 3.964 },
+    { "trade_date": "2026-07-10", "nav": 1.527, "accumulated_nav": 4.1 }
+  ]
+}

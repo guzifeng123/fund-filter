@@ -1,6 +1,10 @@
+from collections.abc import Iterator
 from fastapi.testclient import TestClient
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import time
+from typing import NoReturn
+
+import pytest
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -8,11 +12,25 @@ from sqlalchemy.orm import Session
 
 from app.core.compliance import is_risk_matched
 from app.core.config import settings
-from app.db.models import AiMessage, AiThread, BacktestRun, Fund, FundMetric, FundNav, JobRun, RiskAssessment
+from app.db.models import (
+    AiMessage,
+    AiThread,
+    BacktestRun,
+    Fund,
+    FundMetric,
+    FundNav,
+    JobRun,
+    RiskAssessment,
+)
 from app.db.session import get_db
 from app.jobs.seed_sample_data import seed_sample_data
-from app.jobs.sync_fund_data import calculate_metrics, sync_fund_navs, sync_fund_profiles, sync_risk_levels
-from app.jobs.scheduler import start_scheduler
+from app.jobs.sync_fund_data import (
+    JobAlreadyRunningError,
+    calculate_metrics,
+    sync_fund_navs,
+    sync_fund_profiles,
+    sync_risk_levels,
+)
 from app.main import app
 from app.repositories.data_status import get_data_status
 from app.routers.data import get_data_status_reader
@@ -27,7 +45,7 @@ from app.services.portfolio_service import rebalance_preview
 
 
 def make_client(db_session: Session) -> TestClient:
-    def override_get_db():
+    def override_get_db() -> Iterator[Session]:
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
@@ -56,7 +74,7 @@ def test_filter_excludes_over_risk_funds(db_session: Session) -> None:
             max_drawdown_lte_category_avg=True,
             sharpe_gte=1.2,
             fee_lte=1.5,
-        )
+        ),
     )
     assert all(fund.risk_level in {"R1", "R2"} for fund in result)
 
@@ -87,7 +105,9 @@ def test_filter_reads_database_not_sample_constants(db_session: Session) -> None
 
 
 def test_compare_limits_to_five_codes(db_session: Session) -> None:
-    result = compare_funds(db_session, ["000004", "000003", "000002", "000001", "missing", "ignored"])
+    result = compare_funds(
+        db_session, ["000004", "000003", "000002", "000001", "missing", "ignored"]
+    )
     assert [fund.code for fund in result] == ["000004", "000003", "000002", "000001"]
 
 
@@ -100,23 +120,56 @@ def test_data_status_counts_seeded_rows(db_session: Session) -> None:
     assert status.db_connected
     assert status.fund_count == db_session.scalar(select(func.count()).select_from(Fund))
     assert status.nav_count == db_session.scalar(select(func.count()).select_from(FundNav))
-    assert status.freshness_status == "fresh"
+    assert status.freshness_status == "stale"
     assert status.stale_after_days == 7
     assert status.last_job is not None
     assert status.last_job.name == "seed_sample_data"
 
 
 def test_seed_sample_data_is_idempotent(db_session: Session) -> None:
+    db_session.execute(delete(FundNav))
+    db_session.execute(delete(FundMetric))
+    db_session.execute(delete(Fund))
+    db_session.commit()
+
     seed_sample_data(db_session)
     seed_sample_data(db_session)
 
     assert db_session.scalar(select(func.count()).select_from(Fund)) == 4
     assert db_session.scalar(select(func.count()).select_from(FundNav)) == 24
     assert db_session.scalar(select(func.count()).select_from(FundMetric)) == 4
-    assert db_session.scalar(select(func.count()).select_from(JobRun)) == 4
+    assert db_session.scalar(select(func.count()).select_from(JobRun)) == 2
+    assert {
+        row.details["generation_boundary"] for row in db_session.scalars(select(JobRun)).all()
+    } == {"atomic_promotion"}
 
 
-def test_sample_data_source_sync_jobs_are_idempotent_and_record_job_runs(db_session: Session) -> None:
+def test_seed_sample_data_can_refresh_sample_freshness_for_smoke(
+    db_session: Session,
+) -> None:
+    db_session.execute(delete(FundNav))
+    db_session.execute(delete(FundMetric))
+    db_session.execute(delete(Fund))
+    db_session.commit()
+
+    refreshed_at = datetime(2026, 8, 13, 8, 0, tzinfo=timezone.utc)
+    seed_sample_data(
+        db_session,
+        refresh_data_updated_at=True,
+        now=refreshed_at,
+    )
+
+    status = get_data_status(db_session)
+
+    assert status.fund_count == 4
+    assert status.nav_count == 24
+    assert status.latest_data_updated_at in {refreshed_at.isoformat(), refreshed_at.replace(tzinfo=None).isoformat()}
+    assert status.freshness_status == "fresh"
+
+
+def test_sample_data_source_sync_jobs_are_idempotent_and_record_job_runs(
+    db_session: Session,
+) -> None:
     db_session.execute(delete(FundNav))
     db_session.execute(delete(FundMetric))
     db_session.execute(delete(Fund))
@@ -142,8 +195,7 @@ def test_sample_data_source_sync_jobs_are_idempotent_and_record_job_runs(db_sess
     assert all(row.status == "success" for row in db_session.scalars(select(JobRun)).all())
 
 
-def test_manual_sync_api_runs_selected_task_and_scheduler_defaults_off(db_session: Session) -> None:
-    assert start_scheduler() is None
+def test_manual_sync_api_runs_selected_task(db_session: Session) -> None:
     try:
         client = make_client(db_session)
         response = client.post("/api/data/sync", params={"task": "profiles"})
@@ -158,6 +210,84 @@ def test_manual_sync_api_runs_selected_task_and_scheduler_defaults_off(db_sessio
     assert latest_job is not None
     assert latest_job.name == "sync_fund_profiles"
     assert latest_job.status == "success"
+
+
+def test_scheduler_status_api_exposes_configuration_and_running_tasks(db_session: Session) -> None:
+    db_session.add(
+        JobRun(
+            name="sync_fund_navs",
+            status="running",
+            started_at=datetime.now(timezone.utc),
+            details={},
+        )
+    )
+    db_session.commit()
+
+    try:
+        client = make_client(db_session)
+        response = client.get("/api/data/scheduler/status")
+    finally:
+        clear_overrides()
+
+    body = response.json()["data"]
+    assert response.status_code == 200
+    assert body["enabled"] is True
+    assert body["schedule_mode"] == "interval"
+    assert body["timezone"] == "Asia/Shanghai"
+    assert body["running_tasks"][0]["name"] == "sync_fund_navs"
+
+
+def test_running_job_lock_rejects_overlapping_sync_and_returns_conflict(
+    db_session: Session,
+) -> None:
+    db_session.add(
+        JobRun(
+            name="sync_fund_profiles",
+            status="running",
+            started_at=datetime.now(timezone.utc),
+            details={},
+        )
+    )
+    db_session.commit()
+
+    with pytest.raises(JobAlreadyRunningError, match="already running"):
+        sync_fund_profiles(db_session, "sample_local")
+
+    try:
+        client = make_client(db_session)
+        response = client.post("/api/data/sync", params={"task": "profiles"})
+    finally:
+        clear_overrides()
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "DATA_SYNC_ALREADY_RUNNING"
+    running_count = db_session.scalar(
+        select(func.count())
+        .select_from(JobRun)
+        .where(JobRun.name == "sync_fund_profiles", JobRun.status == "running")
+    )
+    assert running_count == 1
+
+
+def test_expired_running_job_lock_is_failed_before_new_run(db_session: Session) -> None:
+    db_session.add(
+        JobRun(
+            name="sync_fund_profiles",
+            status="running",
+            started_at=datetime.now(timezone.utc) - timedelta(hours=3),
+            details={},
+        )
+    )
+    db_session.commit()
+
+    result = sync_fund_profiles(db_session, "sample_local")
+
+    assert result["fund_count"] == 4
+    rows = db_session.scalars(
+        select(JobRun).where(JobRun.name == "sync_fund_profiles").order_by(JobRun.id)
+    ).all()
+    assert [row.status for row in rows] == ["failed", "success"]
+    assert rows[0].details["error"] == "running job lock expired before a new run started"
 
 
 def test_fund_filter_api_route_uses_database(db_session: Session) -> None:
@@ -184,6 +314,84 @@ def test_fund_filter_api_route_uses_database(db_session: Session) -> None:
     assert all(item["risk_level"] in {"R1", "R2"} for item in response.json()["data"])
 
 
+def test_fund_filter_api_applies_keyword_with_complete_filter_payload(
+    db_session: Session,
+) -> None:
+    try:
+        client = make_client(db_session)
+        response = client.post(
+            "/api/funds/filter",
+            json={
+                "keyword": "  000002  ",
+                "risk_profile": "C2",
+                "fund_types": ["bond"],
+                "min_years": 3,
+                "size_range": [80, 90],
+                "return_rank_percentile": 22,
+                "max_drawdown_lte_category_avg": False,
+                "sharpe_gte": 1.6,
+                "fee_lte": 0.8,
+                "sort_by": "fee",
+                "sort_order": "asc",
+            },
+        )
+    finally:
+        clear_overrides()
+
+    assert response.status_code == 200
+    assert [item["code"] for item in response.json()["data"]] == ["000002"]
+
+
+def test_fund_filter_api_uses_inception_age_and_optional_category_drawdown(
+    db_session: Session,
+) -> None:
+    established_fund = db_session.get(Fund, "000004")
+    young_fund = db_session.get(Fund, "000002")
+    established_metric = db_session.get(FundMetric, "000004")
+    young_metric = db_session.get(FundMetric, "000002")
+    assert established_fund is not None and young_fund is not None
+    assert established_metric is not None and young_metric is not None
+    established_fund.inception_date = date(2000, 1, 1)
+    young_fund.inception_date = date.today()
+    established_metric.manager_years = 0
+    young_metric.manager_years = 99
+    db_session.commit()
+
+    request_body = {
+        "risk_profile": "C5",
+        "fund_types": ["bond"],
+        "min_years": 0,
+        "size_range": [0, 500],
+        "return_rank_percentile": 100,
+        "max_drawdown_lte_category_avg": False,
+        "sharpe_gte": 0,
+        "fee_lte": 3,
+        "sort_by": "code",
+        "sort_order": "asc",
+    }
+    try:
+        client = make_client(db_session)
+        inception_response = client.post(
+            "/api/funds/filter",
+            json={**request_body, "min_years": 3},
+        )
+        unfiltered_response = client.post("/api/funds/filter", json=request_body)
+        drawdown_response = client.post(
+            "/api/funds/filter",
+            json={**request_body, "max_drawdown_lte_category_avg": True},
+        )
+    finally:
+        clear_overrides()
+
+    assert inception_response.status_code == 200
+    assert [item["code"] for item in inception_response.json()["data"]] == ["000004"]
+    assert [item["code"] for item in unfiltered_response.json()["data"]] == [
+        "000002",
+        "000004",
+    ]
+    assert [item["code"] for item in drawdown_response.json()["data"]] == ["000004"]
+
+
 def test_data_status_api_envelope(db_session: Session) -> None:
     try:
         client = make_client(db_session)
@@ -195,12 +403,14 @@ def test_data_status_api_envelope(db_session: Session) -> None:
     assert response.status_code == 200
     assert body["data"]["db_connected"] is True
     assert body["data"]["fund_count"] == 4
-    assert body["data"]["freshness_status"] == "fresh"
-    assert "meta" in body
+    assert body["data"]["freshness_status"] == "stale"
+    assert body["data"]["source"] == "sample_local"
+    assert body["meta"]["source"] == "sample_local"
+    assert body["meta"]["data_updated_at"] == body["data"]["latest_data_updated_at"]
 
 
 def test_data_status_api_degrades_when_database_is_unavailable() -> None:
-    def unavailable_reader():
+    def unavailable_reader() -> NoReturn:
         raise SQLAlchemyError("database unavailable")
 
     app.dependency_overrides[get_data_status_reader] = lambda: unavailable_reader
@@ -214,6 +424,7 @@ def test_data_status_api_degrades_when_database_is_unavailable() -> None:
     assert response.status_code == 200
     assert body["data"] == {
         "db_connected": False,
+        "source": "unavailable",
         "fund_count": 0,
         "nav_count": 0,
         "latest_data_updated_at": None,
@@ -221,11 +432,13 @@ def test_data_status_api_degrades_when_database_is_unavailable() -> None:
         "stale_after_days": 7,
         "last_job": None,
     }
-    assert "meta" in body
+    assert body["meta"]["source"] == "unavailable"
 
 
-def test_data_status_api_abandons_a_slow_database_check(monkeypatch) -> None:
-    def slow_reader():
+def test_data_status_api_abandons_a_slow_database_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def slow_reader() -> NoReturn:
         time.sleep(0.3)
         raise SQLAlchemyError("late database failure")
 
@@ -414,6 +627,17 @@ def test_fund_compare_api_preserves_existing_code_order(db_session: Session) -> 
     assert [item["code"] for item in body["data"]] == ["000004", "000002"]
 
 
+def test_fund_compare_api_requires_at_least_two_codes(db_session: Session) -> None:
+    try:
+        client = make_client(db_session)
+        response = client.post("/api/funds/compare", json={"codes": ["000001"]})
+    finally:
+        clear_overrides()
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
 def test_api_errors_use_uniform_envelope(db_session: Session) -> None:
     try:
         client = make_client(db_session)
@@ -483,6 +707,28 @@ def test_risk_assessment_rejects_incomplete_answers(db_session: Session) -> None
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+def test_risk_assessment_rejects_duplicate_question_ids(db_session: Session) -> None:
+    answers = [
+        {"question_id": "horizon", "score": 3},
+        {"question_id": "drawdown_tolerance", "score": 3},
+        {"question_id": "income_stability", "score": 3},
+        {"question_id": "investment_experience", "score": 3},
+        {"question_id": "liquidity_need", "score": 3},
+        {"question_id": "goal_priority", "score": 3},
+        {"question_id": "goal_priority", "score": 5},
+    ]
+    try:
+        client = make_client(db_session)
+        response = client.post("/api/risk-assessments", json={"answers": answers})
+    finally:
+        clear_overrides()
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert "each question_id at most once" in response.text
+    assert db_session.scalar(select(func.count()).select_from(RiskAssessment)) == 0
+
+
 def test_portfolio_crud_positions_and_rebalance_preview_use_database(db_session: Session) -> None:
     portfolio = create_portfolio(
         db_session,
@@ -493,11 +739,14 @@ def test_portfolio_crud_positions_and_rebalance_preview_use_database(db_session:
 
     try:
         client = make_client(db_session)
-        rename_response = client.patch(f"/api/portfolios/{portfolio.id}", json={"name": "长期稳健组合"})
+        rename_response = client.patch(
+            f"/api/portfolios/{portfolio.id}", json={"name": "长期稳健组合"}
+        )
         position_response = client.put(
             f"/api/portfolios/{portfolio.id}/positions",
             json={"fund_code": "000001", "weight_percent": 70},
         )
+        normalize_response = client.post(f"/api/portfolios/{portfolio.id}/positions/normalize")
         preview_response = client.post(f"/api/portfolios/{portfolio.id}/rebalance-preview")
         remove_response = client.delete(f"/api/portfolios/{portfolio.id}/positions/000001")
     finally:
@@ -512,9 +761,13 @@ def test_portfolio_crud_positions_and_rebalance_preview_use_database(db_session:
     assert "70.00%" in position_response.json()["data"]["weight_warning"]
     assert position_response.json()["data"]["positions"][0]["normalized_weight_percent"] == 100
 
+    assert normalize_response.status_code == 200
+    assert normalize_response.json()["data"]["total_weight_percent"] == 100
+    assert normalize_response.json()["data"]["weight_warning"] is None
+
     preview = preview_response.json()["data"]
     assert preview_response.status_code == 200
-    assert preview["current_stock_ratio"] == 70
+    assert preview["current_stock_ratio"] == 100
     assert preview["target_stock_ratio"] == 50
     assert preview["drift_percent"] == 50
     assert preview["triggered"] is True
@@ -541,6 +794,74 @@ def test_portfolio_templates_api_returns_suitable_risk_profiles(db_session: Sess
     assert "meta" in body
 
 
+def test_unavailable_portfolio_position_is_reported_and_blocks_derived_api_actions(
+    db_session: Session,
+) -> None:
+    portfolio = create_portfolio(
+        db_session,
+        PortfolioCreateRequest(name="保留旧持仓", template_key="balanced"),
+    )
+    from app.repositories.portfolios import upsert_position
+
+    upsert_position(
+        db_session,
+        portfolio.id,
+        PortfolioPositionRequest(fund_code="000001", weight_percent=70),
+    )
+    removed_fund = db_session.get(Fund, "000001")
+    assert removed_fund is not None
+    removed_fund.snapshot_generation_id = "retired-api-generation"
+    db_session.commit()
+
+    try:
+        client = make_client(db_session)
+        list_response = client.get("/api/portfolios")
+        detail_response = client.get(f"/api/portfolios/{portfolio.id}")
+        normalize_response = client.post(f"/api/portfolios/{portfolio.id}/positions/normalize")
+        preview_response = client.post(f"/api/portfolios/{portfolio.id}/rebalance-preview")
+        delete_response = client.delete(f"/api/portfolios/{portfolio.id}/positions/000001")
+    finally:
+        clear_overrides()
+
+    assert list_response.status_code == 200
+    listed = next(item for item in list_response.json()["data"] if item["id"] == portfolio.id)
+    assert listed["unavailable_position_count"] == 1
+    assert detail_response.status_code == 200
+    assert detail_response.json()["data"]["unavailable_position_count"] == 1
+    assert detail_response.json()["data"]["positions"][0]["available"] is False
+    assert (
+        detail_response.json()["data"]["positions"][0]["availability_reason"]
+        == "removed_from_active_snapshot"
+    )
+    for response in (normalize_response, preview_response):
+        assert response.status_code == 409
+        assert response.json()["error"]["code"] == "PORTFOLIO_HAS_UNAVAILABLE_POSITIONS"
+        assert response.json()["error"]["detail"] == {
+            "availability_reason": "removed_from_active_snapshot",
+            "unavailable_fund_codes": ["000001"],
+        }
+    assert delete_response.status_code == 200
+    assert delete_response.json()["data"]["positions"] == []
+
+
+def test_portfolio_derived_actions_document_unavailable_position_conflicts() -> None:
+    openapi = app.openapi()
+
+    for path in (
+        "/api/portfolios/{portfolio_id}/positions/normalize",
+        "/api/portfolios/{portfolio_id}/rebalance-preview",
+    ):
+        response_schema = openapi["paths"][path]["post"]["responses"]["409"]["content"][
+            "application/json"
+        ]["schema"]
+        assert response_schema == {"$ref": "#/components/schemas/ApiErrorResponse"}
+
+    schemas = openapi["components"]["schemas"]
+    assert "available" in schemas["PortfolioPosition"]["required"]
+    assert "availability_reason" in schemas["PortfolioPosition"]["required"]
+    assert "unavailable_position_count" in schemas["PortfolioSummary"]["required"]
+
+
 def test_rebalance_preview_does_not_trigger_below_threshold(db_session: Session) -> None:
     portfolio = create_portfolio(
         db_session,
@@ -549,8 +870,12 @@ def test_rebalance_preview_does_not_trigger_below_threshold(db_session: Session)
     db_session.commit()
     from app.repositories.portfolios import upsert_position
 
-    upsert_position(db_session, portfolio.id, PortfolioPositionRequest(fund_code="000001", weight_percent=52))
-    upsert_position(db_session, portfolio.id, PortfolioPositionRequest(fund_code="000002", weight_percent=48))
+    upsert_position(
+        db_session, portfolio.id, PortfolioPositionRequest(fund_code="000001", weight_percent=52)
+    )
+    upsert_position(
+        db_session, portfolio.id, PortfolioPositionRequest(fund_code="000002", weight_percent=48)
+    )
 
     preview = rebalance_preview(db_session, portfolio.id)
     assert preview is not None
@@ -621,6 +946,41 @@ def test_backtest_handles_missing_navs_without_crashing(db_session: Session) -> 
     assert result.data_warning == "数据不足，无法生成有效回测结果。"
 
 
+def test_backtest_api_returns_404_for_missing_run(db_session: Session) -> None:
+    try:
+        client = make_client(db_session)
+        response = client.get("/api/backtests/bt_missing")
+    finally:
+        clear_overrides()
+
+    assert response.status_code == 404
+    assert response.json()["error"] == {
+        "code": "BACKTEST_NOT_FOUND",
+        "message": "未找到指定回测结果",
+        "detail": None,
+    }
+
+
+def test_backtest_api_rejects_invalid_request_before_calculation(db_session: Session) -> None:
+    try:
+        client = make_client(db_session)
+        response = client.post(
+            "/api/backtests",
+            json={
+                "strategy_type": "monthly_dca",
+                "amount": -1,
+                "start": "2027",
+                "end": "2026",
+                "fund_codes": ["000001", "000001"],
+            },
+        )
+    finally:
+        clear_overrides()
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
 def test_ai_chat_uses_gateway_context_and_guardrails(db_session: Session) -> None:
     try:
         client = make_client(db_session)
@@ -684,11 +1044,21 @@ def test_ai_chat_explains_backtest_result_with_historical_limits(db_session: Ses
 def test_ai_threads_and_streaming_response_are_persistent(db_session: Session) -> None:
     try:
         client = make_client(db_session)
-        chat_response = client.post("/api/ai/chat", json={"message": "解释基金指标", "context": {"fund_code": "000001"}})
+        chat_response = client.post(
+            "/api/ai/chat", json={"message": "解释基金指标", "context": {"fund_code": "000001"}}
+        )
         thread_id = chat_response.json()["data"]["thread_id"]
         threads_response = client.get("/api/ai/threads")
         thread_response = client.get(f"/api/ai/threads/{thread_id}")
-        with client.stream("POST", "/api/ai/chat/stream", json={"thread_id": thread_id, "message": "继续解释", "context": {"fund_code": "000001"}}) as stream_response:
+        with client.stream(
+            "POST",
+            "/api/ai/chat/stream",
+            json={
+                "thread_id": thread_id,
+                "message": "继续解释",
+                "context": {"fund_code": "000001"},
+            },
+        ) as stream_response:
             stream_text = "".join(stream_response.iter_text())
     finally:
         clear_overrides()
@@ -697,8 +1067,16 @@ def test_ai_threads_and_streaming_response_are_persistent(db_session: Session) -
     assert threads_response.json()["data"][0]["id"] == thread_id
     assert thread_response.status_code == 200
     assert len(thread_response.json()["data"]["messages"]) == 2
+    assert threads_response.json()["meta"] == {
+        "source": "database",
+        "data_updated_at": None,
+        "disclaimer": "本工具基于历史数据，仅供分析学习，不构成投资建议。历史表现不预示未来收益。",
+        "pagination": None,
+    }
     assert "data:" in stream_text
     assert '"done": true' in stream_text
+    assert '"source": "sample_local"' in stream_text
+    assert '"data_updated_at": "2026-07-08T20:30:00"' in stream_text
     assert db_session.scalar(select(func.count()).select_from(AiMessage)) == 4
 
 

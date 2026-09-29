@@ -1,6 +1,9 @@
 from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
+import logging
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,16 +11,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.compliance import error_envelope
 from app.core.config import settings
 from app.jobs.scheduler import start_scheduler, stop_scheduler
-from app.routers import ai, backtests, dashboard, data, funds, portfolios, risk_assessments
+from app.repositories.llm_observability import shutdown_default_llm_event_dispatcher
+from app.routers import ai, backtests, dashboard, data, funds, portfolios, risk_assessments, settings as settings_router
+
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     start_scheduler()
     try:
         yield
     finally:
         stop_scheduler()
+        if not shutdown_default_llm_event_dispatcher(
+            timeout_seconds=settings.llm_observability_shutdown_timeout_seconds
+        ):
+            logger.warning("llm_provider_event_dispatcher_shutdown_timed_out")
 
 
 app = FastAPI(title="Fund Analysis API", version="0.1.0", lifespan=lifespan)
@@ -37,6 +48,7 @@ app.include_router(risk_assessments.router, prefix="/api/risk-assessments", tags
 app.include_router(portfolios.router, prefix="/api/portfolios", tags=["portfolios"])
 app.include_router(backtests.router, prefix="/api/backtests", tags=["backtests"])
 app.include_router(ai.router, prefix="/api/ai", tags=["ai"])
+app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"])
 
 
 @app.exception_handler(HTTPException)
@@ -58,12 +70,16 @@ async def http_exception_handler(_: Request, exc: HTTPException) -> JSONResponse
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    detail = jsonable_encoder(
+        exc.errors(),
+        custom_encoder={BaseException: str},
+    )
     return JSONResponse(
         status_code=422,
         content=error_envelope(
             code="VALIDATION_ERROR",
             message="请求参数不符合接口要求",
-            detail=exc.errors(),
+            detail=detail,
         ),
     )
 

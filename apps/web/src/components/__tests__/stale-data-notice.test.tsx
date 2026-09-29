@@ -1,9 +1,18 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isDataStale, StaleDataNotice } from "@/components/stale-data-notice";
 
 describe("StaleDataNotice", () => {
   const now = new Date("2026-07-09T12:00:00Z");
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("detects stale data after the configured threshold", () => {
     expect(isDataStale("2026-07-01T11:59:59Z", 7, now)).toBe(true);
@@ -30,5 +39,16 @@ describe("StaleDataNotice", () => {
     );
 
     expect(html).toBe("");
+  });
+
+  it("renders an explicit unknown state for a loaded response without data time", () => {
+    const html = renderToStaticMarkup(<StaleDataNotice updatedAt={null} />);
+
+    expect(html).toContain("数据更新时间未知");
+    expect(html).toContain("最近同步记录");
+  });
+
+  it("renders nothing before a response is available", () => {
+    expect(renderToStaticMarkup(<StaleDataNotice updatedAt={undefined} />)).toBe("");
   });
 });

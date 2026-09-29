@@ -1,19 +1,19 @@
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
     thread_id: str | None = None
     message: str
-    context: dict[str, Any] = {}
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 class ChatResponse(BaseModel):
     thread_id: str | None = None
     conclusion: str
     evidence: list[str]
-    references: list[str] = []
+    references: list[str] = Field(default_factory=list)
     risk: str
     data_date: str
     disclaimer: str

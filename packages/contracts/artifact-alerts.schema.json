@@ -1,0 +1,103 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://fund-analysis.local/contracts/artifact-alerts.schema.json",
+  "title": "Release artifact alerts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ok",
+    "manifest_ok",
+    "alerts_ok",
+    "fail_on_alerts",
+    "started_at",
+    "finished_at",
+    "git_commit",
+    "run_directory",
+    "alert_count",
+    "alerts"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "ok": {
+      "type": "boolean",
+      "description": "True when no alerts are present."
+    },
+    "manifest_ok": {
+      "type": "boolean",
+      "description": "The aggregate manifest status from the artifact collection run."
+    },
+    "alerts_ok": {
+      "type": "boolean",
+      "description": "True when no artifact alerts are present."
+    },
+    "fail_on_alerts": {
+      "type": "boolean",
+      "description": "Whether artifact alerts should fail the collection command."
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "git_commit": {
+      "type": ["string", "null"]
+    },
+    "run_directory": {
+      "type": "string",
+      "minLength": 1
+    },
+    "alert_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "alerts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/alert"
+      }
+    }
+  },
+  "definitions": {
+    "alert": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "severity",
+        "message",
+        "source",
+        "destination"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "missing_required_artifact",
+            "failed_artifact_report"
+          ]
+        },
+        "severity": {
+          "enum": [
+            "error"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "destination": {
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}

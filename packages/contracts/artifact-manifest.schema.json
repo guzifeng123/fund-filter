@@ -1,0 +1,124 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://fund-analysis.local/contracts/artifact-manifest.schema.json",
+  "title": "Release artifact manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ok",
+    "manifest_ok",
+    "alerts_ok",
+    "fail_on_alerts",
+    "what_if",
+    "started_at",
+    "finished_at",
+    "duration_ms",
+    "workspace_root",
+    "git_commit",
+    "output_directory",
+    "profile",
+    "source_paths",
+    "skipped_sources",
+    "required_artifacts",
+    "missing_required_artifacts",
+    "alerts_schema_version",
+    "alert_count",
+    "alerts",
+    "artifact_count",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "ok": { "type": "boolean" },
+    "manifest_ok": { "type": "boolean" },
+    "alerts_ok": { "type": "boolean" },
+    "fail_on_alerts": { "type": "boolean" },
+    "what_if": { "type": "boolean" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "finished_at": { "type": "string", "format": "date-time" },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "workspace_root": { "type": "string", "minLength": 1 },
+    "git_commit": { "type": ["string", "null"] },
+    "output_directory": { "type": "string", "minLength": 1 },
+    "profile": { "type": "string" },
+    "source_paths": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "skipped_sources": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "required_artifacts": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "missing_required_artifacts": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "alerts_schema_version": { "const": 1 },
+    "alert_count": { "type": "integer", "minimum": 0 },
+    "alerts": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/alert" }
+    },
+    "artifact_count": { "type": "integer", "minimum": 0 },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/artifact" }
+    }
+  },
+  "definitions": {
+    "alert": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "severity",
+        "message",
+        "source",
+        "destination"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "missing_required_artifact",
+            "failed_artifact_report"
+          ]
+        },
+        "severity": {
+          "enum": [
+            "error"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "destination": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "destination", "size_bytes", "sha256"],
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "destination": { "type": "string", "minLength": 1 },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        }
+      }
+    }
+  }
+}

@@ -1,20 +1,108 @@
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.core.nav_quality import NavQualityWarningPayload
+from app.core.snapshot_quality import SnapshotQualityThresholds, validate_snapshot_quality
+from app.data_sources.base import FundDataSource
 from app.data_sources import get_fund_data_source
-from app.db.models import Fund, JobRun
+from app.db.models import FundDataSnapshot, JobRun, JsonObject
 from app.db.session import get_sessionmaker
-from app.repositories.funds import upsert_fund_detail
+from app.repositories.fund_snapshots import (
+    lock_snapshot_state,
+    promote_snapshot,
+    stage_snapshot,
+    validate_staged_snapshot,
+)
+from app.repositories.funds import (
+    upsert_fund_metrics,
+    upsert_fund_navs,
+    upsert_fund_profile,
+)
 from app.repositories.portfolios import ensure_default_portfolios
+from app.schemas.funds import FundDetail
 
 
-def _run_job(db: Session, name: str, fn: Callable[[], dict]) -> dict:
-    job = JobRun(name=name, status="running", started_at=datetime.now(timezone.utc), details={})
-    db.add(job)
+NAV_WARNING_DETAIL_LIMIT = 100
+ATOMIC_PROMOTION_BOUNDARY = "atomic_promotion"
+
+
+class JobAlreadyRunningError(RuntimeError):
+    pass
+
+
+def _warning_json(payload: NavQualityWarningPayload) -> JsonObject:
+    return {
+        "code": payload["code"],
+        "fund_code": payload["fund_code"],
+        "trade_date": payload["trade_date"],
+        "field": payload["field"],
+        "value": payload["value"],
+        "minimum": payload["minimum"],
+        "maximum": payload["maximum"],
+        "message": payload["message"],
+    }
+
+
+def _new_snapshot_generation_id() -> str:
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    return f"snapshot-{timestamp}-{uuid4().hex[:12]}"
+
+
+def _validate_complete_snapshot(funds: list[FundDetail]) -> None:
+    if not funds:
+        raise ValueError("fund data source returned an empty snapshot; refusing promotion")
+    seen_codes: set[str] = set()
+    duplicate_codes: set[str] = set()
+    for fund in funds:
+        if fund.code in seen_codes:
+            duplicate_codes.add(fund.code)
+        seen_codes.add(fund.code)
+    if duplicate_codes:
+        raise ValueError(
+            "fund data source returned duplicate fund codes: "
+            + ", ".join(sorted(duplicate_codes))
+        )
+
+
+def _thresholds_json(thresholds: SnapshotQualityThresholds) -> JsonObject:
+    return {
+        "min_fund_count": thresholds.min_fund_count,
+        "min_nav_coverage_ratio": thresholds.min_nav_coverage_ratio,
+        "max_latest_nav_age_days": thresholds.max_latest_nav_age_days,
+        "max_fund_count_drop_ratio": thresholds.max_fund_count_drop_ratio,
+    }
+
+
+def _run_job(
+    db: Session,
+    name: str,
+    fn: Callable[[], JsonObject],
+) -> JsonObject:
+    started_at = datetime.now(timezone.utc)
+    stale_before = started_at - timedelta(minutes=settings.fund_sync_lock_timeout_minutes)
+    db.execute(
+        update(JobRun)
+        .where(JobRun.name == name, JobRun.status == "running", JobRun.started_at < stale_before)
+        .values(
+            status="failed",
+            finished_at=started_at,
+            details={"error": "running job lock expired before a new run started"},
+        )
+    )
     db.commit()
+    job = JobRun(name=name, status="running", started_at=started_at, details={})
+    db.add(job)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise JobAlreadyRunningError(f"job {name} is already running") from exc
     try:
         details = fn()
         job.status = "success"
@@ -32,69 +120,140 @@ def _run_job(db: Session, name: str, fn: Callable[[], dict]) -> dict:
         raise
 
 
-def sync_fund_profiles(db: Session, source_name: str | None = None) -> dict:
-    source = get_fund_data_source(source_name)
+def _run_atomic_snapshot_job(
+    db: Session,
+    *,
+    source_name: str | None,
+    job_name: str,
+    requested_task: str,
+    source_override: FundDataSource | None = None,
+) -> JsonObject:
+    source = source_override or get_fund_data_source(source_name)
 
-    def task() -> dict:
-        funds = source.fetch_fund_profiles()
+    def task() -> JsonObject:
+        funds = source.fetch_snapshot()
+        _validate_complete_snapshot(funds)
+        generation_id = _new_snapshot_generation_id()
+        state = lock_snapshot_state(db)
+        previous_generation_id = state.active_generation_id
+        previous_snapshot = db.get(FundDataSnapshot, previous_generation_id)
+        previous_fund_count = previous_snapshot.fund_count if previous_snapshot else 0
+        quality_thresholds = validate_snapshot_quality(
+            funds,
+            source_name=source.name,
+            previous_fund_count=previous_fund_count,
+        )
+        nav_count = sum(len(fund.navs) for fund in funds)
+        snapshot = stage_snapshot(
+            db,
+            generation_id=generation_id,
+            source=source.name,
+            fund_count=len(funds),
+            nav_count=nav_count,
+            metric_count=len(funds),
+        )
+
+        quality_warnings: list[NavQualityWarningPayload] = []
         for fund in funds:
-            upsert_fund_detail(db, fund)
+            upsert_fund_profile(db, fund, generation_id)
+            db.flush()
+            upsert_fund_metrics(db, fund, generation_id)
+            quality_warnings.extend(upsert_fund_navs(db, fund, generation_id))
         ensure_default_portfolios(db)
-        return {"source": source.name, "fund_count": len(funds)}
+        validate_staged_snapshot(db, snapshot)
+        promote_snapshot(db, state=state, snapshot=snapshot)
 
-    return _run_job(db, "sync_fund_profiles", task)
+        details: JsonObject = {
+            "source": source.name,
+            "requested_task": requested_task,
+            "effective_scope": "full_snapshot",
+            "snapshot_generation_id": generation_id,
+            "previous_snapshot_generation_id": previous_generation_id,
+            "generation_boundary": ATOMIC_PROMOTION_BOUNDARY,
+            "fund_count": len(funds),
+            "nav_count": nav_count,
+            "metric_count": len(funds),
+            "updated_count": len(funds),
+            "snapshot_quality_thresholds": _thresholds_json(quality_thresholds),
+        }
+        if quality_warnings:
+            details.update(
+                {
+                    "quality_warning_count": len(quality_warnings),
+                    "quality_warnings": [
+                        _warning_json(warning)
+                        for warning in quality_warnings[:NAV_WARNING_DETAIL_LIMIT]
+                    ],
+                    "quality_warnings_truncated": len(quality_warnings)
+                    > NAV_WARNING_DETAIL_LIMIT,
+                }
+            )
+        return details
 
-
-def sync_fund_navs(db: Session, source_name: str | None = None) -> dict:
-    source = get_fund_data_source(source_name)
-
-    def task() -> dict:
-        funds = source.fetch_fund_navs()
-        nav_count = 0
-        for fund in funds:
-            upsert_fund_detail(db, fund)
-            nav_count += len(fund.navs)
-        return {"source": source.name, "fund_count": len(funds), "nav_count": nav_count}
-
-    return _run_job(db, "sync_fund_navs", task)
-
-
-def sync_risk_levels(db: Session, source_name: str | None = None) -> dict:
-    source = get_fund_data_source(source_name)
-
-    def task() -> dict:
-        levels = source.fetch_risk_levels()
-        updated = 0
-        for code, risk_level in levels.items():
-            row = db.get(Fund, code)
-            if row is None:
-                continue
-            row.risk_level = risk_level
-            updated += 1
-        return {"source": source.name, "updated_count": updated}
-
-    return _run_job(db, "sync_risk_levels", task)
+    return _run_job(db, job_name, task)
 
 
-def calculate_metrics(db: Session, source_name: str | None = None) -> dict:
-    source = get_fund_data_source(source_name)
+def sync_fund_profiles(
+    db: Session,
+    source_name: str | None = None,
+) -> JsonObject:
+    return _run_atomic_snapshot_job(
+        db,
+        source_name=source_name,
+        job_name="sync_fund_profiles",
+        requested_task="profiles",
+    )
 
-    def task() -> dict:
-        funds = source.fetch_fund_profiles()
-        for fund in funds:
-            upsert_fund_detail(db, fund)
-        return {"source": source.name, "metric_count": len(funds)}
 
-    return _run_job(db, "calculate_metrics", task)
+def sync_fund_navs(
+    db: Session,
+    source_name: str | None = None,
+) -> JsonObject:
+    return _run_atomic_snapshot_job(
+        db,
+        source_name=source_name,
+        job_name="sync_fund_navs",
+        requested_task="navs",
+    )
 
 
-def sync_all(db: Session, source_name: str | None = None) -> dict:
-    return {
-        "profiles": sync_fund_profiles(db, source_name),
-        "navs": sync_fund_navs(db, source_name),
-        "risk_levels": sync_risk_levels(db, source_name),
-        "metrics": calculate_metrics(db, source_name),
-    }
+def sync_risk_levels(
+    db: Session,
+    source_name: str | None = None,
+) -> JsonObject:
+    return _run_atomic_snapshot_job(
+        db,
+        source_name=source_name,
+        job_name="sync_risk_levels",
+        requested_task="risk_levels",
+    )
+
+
+def calculate_metrics(
+    db: Session,
+    source_name: str | None = None,
+) -> JsonObject:
+    return _run_atomic_snapshot_job(
+        db,
+        source_name=source_name,
+        job_name="calculate_metrics",
+        requested_task="metrics",
+    )
+
+
+def sync_all(
+    db: Session,
+    source_name: str | None = None,
+    *,
+    source_override: FundDataSource | None = None,
+) -> JsonObject:
+    return _run_atomic_snapshot_job(
+        db,
+        source_name=source_name,
+        job_name="sync_all",
+        requested_task="all",
+        source_override=source_override,
+    )
 
 
 def run() -> None:

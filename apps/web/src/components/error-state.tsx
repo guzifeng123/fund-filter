@@ -1,4 +1,5 @@
 import { AlertTriangle, RefreshCw } from "lucide-react";
+import { Button } from "@/components/button";
 
 export function ErrorState({
   title = "数据加载失败",
@@ -17,12 +18,14 @@ export function ErrorState({
           <div className="font-semibold">{title}</div>
           <div className="mt-1 text-xs leading-5 text-[var(--text-muted)]">{description}</div>
           {onRetry ? (
-            <button
-              className="focus-ring mt-3 inline-flex h-8 items-center gap-1 rounded-md border border-[var(--border)] px-2 text-xs hover:bg-[var(--surface-muted)]"
+            <Button
+              variant="secondary"
+              size="sm"
+              className="mt-3 gap-1"
               onClick={onRetry}
             >
               <RefreshCw className="h-3.5 w-3.5" /> 重试
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>

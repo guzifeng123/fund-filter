@@ -21,6 +21,11 @@ describe("getApiErrorMessage", () => {
       .toBe("日期范围无效 开始日期不能晚于结束日期。");
   });
 
+  it("explains how to recover when a persisted backtest no longer exists", () => {
+    expect(getApiErrorMessage(apiError("BACKTEST_NOT_FOUND", "未找到指定回测结果"), "fallback"))
+      .toBe("未找到指定回测结果 该回测记录不存在或已被清理，请重新运行回测。");
+  });
+
   it("preserves the server message for an unknown API error code", () => {
     expect(getApiErrorMessage(apiError("CUSTOM_ERROR", "自定义错误"), "fallback"))
       .toBe("自定义错误");

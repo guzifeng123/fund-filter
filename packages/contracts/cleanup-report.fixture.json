@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "what_if": true,
+  "started_at": "2026-07-12T00:00:00.0000000Z",
+  "finished_at": "2026-07-12T00:00:01.0000000Z",
+  "duration_ms": 1000,
+  "workspace_root": "C:\\Users\\39187\\Desktop\\基金",
+  "cleanup_mode": "pattern",
+  "fixed_targets_only": false,
+  "pattern_targets_only": true,
+  "search_roots": ["tmp-clean-generated-type-check"],
+  "exclude_directories": ["node_modules", ".git", ".next", ".venv", "output", "backups", ".playwright-cli"],
+  "include_extensions": [".log"],
+  "exclude_patterns": ["*.egg-info"],
+  "skipped_roots": [],
+  "skipped_pattern_items": [
+    "C:\\Users\\39187\\Desktop\\基金\\tmp-clean-generated-type-check\\skip.egg-info"
+  ],
+  "matched_items": [
+    "C:\\Users\\39187\\Desktop\\基金\\tmp-clean-generated-type-check\\api-dev.log",
+    "C:\\Users\\39187\\Desktop\\基金\\tmp-clean-generated-type-check\\__pycache__"
+  ],
+  "removed_items": [],
+  "matched_item_details": [
+    {
+      "path": "C:\\Users\\39187\\Desktop\\基金\\tmp-clean-generated-type-check\\api-dev.log",
+      "type": "log"
+    },
+    {
+      "path": "C:\\Users\\39187\\Desktop\\基金\\tmp-clean-generated-type-check\\__pycache__",
+      "type": "pycache"
+    }
+  ],
+  "removed_item_details": [],
+  "matched_by_type": {
+    "fixed": 0,
+    "log": 1,
+    "pycache": 1,
+    "egg-info": 0,
+    "directory": 0,
+    "other": 0
+  },
+  "removed_by_type": {
+    "fixed": 0,
+    "log": 0,
+    "pycache": 0,
+    "egg-info": 0,
+    "directory": 0,
+    "other": 0
+  },
+  "matched_count": 2,
+  "removed_count": 0
+}

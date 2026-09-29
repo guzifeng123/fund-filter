@@ -1,4 +1,5 @@
 from uuid import uuid4
+from typing import Any
 
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session, joinedload
@@ -38,7 +39,13 @@ def ensure_thread(db: Session, message: str, thread_id: str | None = None, user_
     return row
 
 
-def add_message(db: Session, thread_id: str, role: str, content: str, payload: dict) -> AiMessage:
+def add_message(
+    db: Session,
+    thread_id: str,
+    role: str,
+    content: str,
+    payload: dict[str, Any],
+) -> AiMessage:
     row = AiMessage(thread_id=thread_id, role=role, content=content, payload=payload)
     db.add(row)
     return row

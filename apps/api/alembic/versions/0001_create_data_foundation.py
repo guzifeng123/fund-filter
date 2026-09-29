@@ -17,8 +17,14 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+def json_type() -> sa.types.TypeEngine:
+    return postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), "sqlite")
+
+
 def upgrade() -> None:
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute("CREATE EXTENSION IF NOT EXISTS vector")
     op.create_table(
         "funds",
         sa.Column("code", sa.String(length=32), nullable=False),
@@ -33,7 +39,7 @@ def upgrade() -> None:
         sa.Column("source", sa.String(length=64), nullable=False),
         sa.Column("data_updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("ai_summary", sa.Text(), nullable=False),
-        sa.Column("raw_data", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("raw_data", json_type(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("code"),
@@ -46,8 +52,8 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=64), nullable=False),
         sa.Column("user_id", sa.String(length=64), nullable=False),
         sa.Column("strategy_type", sa.String(length=64), nullable=False),
-        sa.Column("request_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-        sa.Column("result_snapshot", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("request_payload", json_type(), nullable=False),
+        sa.Column("result_snapshot", json_type(), nullable=False),
         sa.Column("annualized_return", sa.Float(), nullable=False),
         sa.Column("max_drawdown", sa.Float(), nullable=False),
         sa.Column("volatility", sa.Float(), nullable=False),
@@ -62,7 +68,7 @@ def upgrade() -> None:
         sa.Column("status", sa.String(length=32), nullable=False),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("details", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("details", json_type(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_job_runs_name"), "job_runs", ["name"], unique=False)
@@ -75,7 +81,7 @@ def upgrade() -> None:
         sa.Column("template_key", sa.String(length=64), nullable=False),
         sa.Column("stock_ratio", sa.Integer(), nullable=False),
         sa.Column("bond_ratio", sa.Integer(), nullable=False),
-        sa.Column("config", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("config", json_type(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
@@ -86,7 +92,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("user_id", sa.String(length=64), nullable=False),
         sa.Column("risk_profile", sa.String(length=8), nullable=False),
-        sa.Column("answers", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("answers", json_type(), nullable=False),
         sa.Column("assessed_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -100,7 +106,7 @@ def upgrade() -> None:
         sa.Column("sharpe_ratio", sa.Float(), nullable=False),
         sa.Column("category_rank_percentile", sa.Float(), nullable=False),
         sa.Column("manager_years", sa.Integer(), nullable=False),
-        sa.Column("raw_data", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("raw_data", json_type(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["fund_code"], ["funds.code"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("fund_code"),
@@ -112,7 +118,7 @@ def upgrade() -> None:
         sa.Column("trade_date", sa.String(length=32), nullable=False),
         sa.Column("nav", sa.Float(), nullable=False),
         sa.Column("accumulated_nav", sa.Float(), nullable=False),
-        sa.Column("raw_data", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("raw_data", json_type(), nullable=False),
         sa.ForeignKeyConstraint(["fund_code"], ["funds.code"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("fund_code", "trade_date", name="uq_fund_navs_fund_code_trade_date"),
@@ -125,7 +131,7 @@ def upgrade() -> None:
         sa.Column("portfolio_id", sa.String(length=64), nullable=False),
         sa.Column("fund_code", sa.String(length=32), nullable=False),
         sa.Column("weight_percent", sa.Float(), nullable=False),
-        sa.Column("metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("metadata", json_type(), nullable=False),
         sa.ForeignKeyConstraint(["fund_code"], ["funds.code"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["portfolio_id"], ["portfolios.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),

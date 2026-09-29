@@ -14,8 +14,10 @@ services:
     build:
       context: ./apps/api
     environment:
+      APP_ENVIRONMENT: production
       DATABASE_URL: postgresql+psycopg://fund_user:fund_password@postgres:5432/fund_app
       CORS_ORIGINS: http://localhost:3000
+      WEB_ORIGIN: http://localhost:3000
     ports:
       - "8000:8000"
     depends_on:

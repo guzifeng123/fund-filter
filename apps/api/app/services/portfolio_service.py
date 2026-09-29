@@ -45,5 +45,9 @@ def remove_position(db: Session, portfolio_id: str, fund_code: str) -> Portfolio
     return portfolio_repository.delete_position(db, portfolio_id, fund_code)
 
 
+def normalize_positions(db: Session, portfolio_id: str) -> PortfolioDetail | None:
+    return portfolio_repository.normalize_position_weights(db, portfolio_id)
+
+
 def rebalance_preview(db: Session, portfolio_id: str) -> RebalancePreview | None:
     return portfolio_repository.rebalance_preview(db, portfolio_id)

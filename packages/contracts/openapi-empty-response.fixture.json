@@ -1,0 +1,33 @@
+{
+  "openapi": "3.1.0",
+  "paths": {
+    "/empty": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "invalid empty JSON response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "non-JSON streams are outside this gate",
+            "content": {
+              "text/event-stream": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

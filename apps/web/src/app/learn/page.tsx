@@ -1,21 +1,28 @@
+import { LEARNING_GLOSSARY, LEARNING_MODULES } from "@/app/learn/learning-content";
+import { LearningGlossary, LearningModule } from "@/app/learn/learning-module";
 import { ComplianceNotice } from "@/components/compliance-notice";
 import { PageHeader } from "@/components/page-header";
-
-const lessons = ["基金基础概念", "风险等级解释", "定投和再平衡", "最大回撤、夏普比率和波动率", "常见误区"];
 
 export default function LearnPage() {
   return (
     <>
-      <PageHeader title="投教学习" description="把指标和策略解释清楚，再进入筛选和回测。" />
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {lessons.map((lesson) => (
-          <article key={lesson} className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
-            <h2 className="text-base font-semibold">{lesson}</h2>
-            <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">本节内容进入 RAG 检索后，可被 AI 助手引用并标注来源。</p>
-          </article>
-        ))}
+      <PageHeader
+        title="投教学习"
+        description="用简化公式和小例子理解历史指标、费用与策略边界，再进入筛选、比较和回测。"
+      />
+      <div className="mb-4">
+        <ComplianceNotice>本页示例仅用于解释指标口径；计算前请确认数据区间、更新时间和费用假设。</ComplianceNotice>
       </div>
-      <div className="mt-4"><ComplianceNotice /></div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <section className="order-2 grid gap-4 xl:order-1" aria-label="投教学习模块">
+          {LEARNING_MODULES.map((module, index) => (
+            <LearningModule key={module.id} module={module} index={index + 1} />
+          ))}
+        </section>
+        <div className="order-1 xl:order-2">
+          <LearningGlossary modules={LEARNING_MODULES} items={LEARNING_GLOSSARY} />
+        </div>
+      </div>
     </>
   );
 }

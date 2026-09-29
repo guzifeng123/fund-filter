@@ -17,4 +17,13 @@ describe("backtest page compliance", () => {
     expect(source).toContain('backtest_id: backtestId');
     expect(source).toContain("解释本次回测");
   });
+
+  it("renders every compliance field returned by the AI explanation", () => {
+    const source = readFileSync(path.join(__dirname, "page.tsx"), "utf8");
+
+    expect(source).toContain("explainMutation.data.data.references");
+    expect(source).toContain("explainMutation.data.data.data_date");
+    expect(source).toContain("explainMutation.data.data.disclaimer");
+    expect(source).toContain("引用与数据来源");
+  });
 });

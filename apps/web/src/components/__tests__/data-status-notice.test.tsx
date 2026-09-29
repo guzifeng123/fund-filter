@@ -5,6 +5,7 @@ import type { DataStatus } from "@/lib/api/types";
 
 const baseStatus: DataStatus = {
   db_connected: true,
+  source: "sample_local",
   fund_count: 2,
   nav_count: 4,
   latest_data_updated_at: "2026-07-01T10:00:00Z",
@@ -24,6 +25,27 @@ describe("DataStatusNotice", () => {
     );
     expect(html).toContain("数据已超过新鲜度阈值");
     expect(html).toContain("超过 7 天");
+  });
+
+  it("distinguishes a successful sync from an unchanged upstream snapshot", () => {
+    const html = renderToStaticMarkup(
+      <DataStatusNotice
+        status={{
+          ...baseStatus,
+          freshness_status: "stale",
+          source: "eastmoney_snapshot",
+          last_job: {
+            name: "sync_all",
+            status: "success",
+            finished_at: "2026-08-20T14:55:25.331508",
+            error_detail: null
+          }
+        }}
+      />
+    );
+    expect(html).toContain("最近一次同步已成功完成");
+    expect(html).toContain("上游最新数据仍停留在 2026-07-01");
+    expect(html).toContain("检查数据源是否仍提供旧快照");
   });
 
   it("renders the latest synchronization error", () => {

@@ -1,16 +1,50 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.compliance import envelope
 from app.db.session import get_db
-from app.repositories.funds import latest_fund_data_updated_at
-from app.schemas.funds import FundCompareRequest, FundFilterRequest, FundSortBy, FundType, RiskLevel, RiskProfile, SortOrder
-from app.services.fund_service import compare_funds, filter_funds, get_fund, get_fund_navs, search_funds
+from app.repositories.funds import FundDataContext
+from app.schemas.common import ApiErrorResponse, ApiResponse
+from app.schemas.funds import (
+    Fund,
+    FundCompareRequest,
+    FundDetail,
+    FundFilterRequest,
+    FundSortBy,
+    FundType,
+    NavPoint,
+    RiskLevel,
+    RiskProfile,
+    SortOrder,
+)
+from app.services.fund_service import (
+    compare_funds_with_context,
+    filter_funds_with_context,
+    get_fund_navs_with_context,
+    get_fund_with_context,
+    search_funds_with_context,
+)
 
 router = APIRouter()
 
 
-@router.get("/search")
+def _envelope_from_context(
+    data: Any,
+    context: FundDataContext,
+    *,
+    pagination: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    return envelope(
+        data,
+        source=context.source,
+        data_updated_at=context.data_updated_at,
+        pagination=pagination,
+    )
+
+
+@router.get("/search", response_model=ApiResponse[list[Fund]])
 def search(
     q: str = "",
     page: int = Query(1, ge=1),
@@ -20,41 +54,79 @@ def search(
     sort_by: FundSortBy = "code",
     sort_order: SortOrder = "asc",
     db: Session = Depends(get_db),
-):
-    funds, total = search_funds(db, q, page, page_size, fund_type, risk_level, sort_by, sort_order)
-    return envelope(
-        funds,
-        data_updated_at=latest_fund_data_updated_at(db),
-        pagination={"page": page, "page_size": page_size, "total": total},
+) -> dict[str, Any]:
+    result = search_funds_with_context(
+        db,
+        q,
+        page=page,
+        page_size=page_size,
+        fund_types=fund_type,
+        risk_levels=risk_level,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+    return _envelope_from_context(
+        result.data,
+        result.context,
+        pagination={"page": page, "page_size": page_size, "total": result.total},
     )
 
 
-@router.post("/filter")
-def filter_endpoint(payload: FundFilterRequest, db: Session = Depends(get_db)):
-    return envelope(filter_funds(db, payload), data_updated_at=latest_fund_data_updated_at(db))
+@router.post("/filter", response_model=ApiResponse[list[Fund]])
+def filter_endpoint(
+    payload: FundFilterRequest,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    result = filter_funds_with_context(db, payload)
+    return _envelope_from_context(result.data, result.context)
 
 
-@router.post("/compare")
-def compare(payload: FundCompareRequest, db: Session = Depends(get_db)):
-    return envelope(compare_funds(db, payload.codes), data_updated_at=latest_fund_data_updated_at(db))
+@router.post("/compare", response_model=ApiResponse[list[Fund]])
+def compare(
+    payload: FundCompareRequest,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    result = compare_funds_with_context(db, payload.codes)
+    return _envelope_from_context(result.data, result.context)
 
 
-@router.get("/{code}")
-def detail(code: str, risk_profile: RiskProfile = "C3", db: Session = Depends(get_db)):
-    fund = get_fund(db, code, risk_profile)
-    if fund is None:
-        raise HTTPException(status_code=404, detail={"code": "FUND_NOT_FOUND", "message": "未找到指定基金"})
-    return envelope(fund, data_updated_at=latest_fund_data_updated_at(db))
+@router.get(
+    "/{code}",
+    response_model=ApiResponse[FundDetail],
+    responses={404: {"model": ApiErrorResponse}},
+)
+def detail(
+    code: str,
+    risk_profile: RiskProfile = "C3",
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    result = get_fund_with_context(db, code, risk_profile)
+    if result is None:
+        raise HTTPException(
+            status_code=404, detail={"code": "FUND_NOT_FOUND", "message": "未找到指定基金"}
+        )
+    return _envelope_from_context(result.data, result.context)
 
 
-@router.get("/{code}/nav")
-def nav(code: str, start: str | None = None, end: str | None = None, db: Session = Depends(get_db)):
+@router.get(
+    "/{code}/nav",
+    response_model=ApiResponse[list[NavPoint]],
+    responses={400: {"model": ApiErrorResponse}, 404: {"model": ApiErrorResponse}},
+)
+def nav(
+    code: str,
+    start: str | None = None,
+    end: str | None = None,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
     if start and end and start > end:
         raise HTTPException(
             status_code=400,
             detail={"code": "INVALID_DATE_RANGE", "message": "start 不能晚于 end"},
         )
-    navs = get_fund_navs(db, code, start, end)
-    if navs is None:
-        raise HTTPException(status_code=404, detail={"code": "FUND_NOT_FOUND", "message": "未找到指定基金"})
-    return envelope(navs, data_updated_at=latest_fund_data_updated_at(db))
+    result = get_fund_navs_with_context(db, code, start, end)
+    if result is None:
+        raise HTTPException(
+            status_code=404, detail={"code": "FUND_NOT_FOUND", "message": "未找到指定基金"}
+        )
+    return _envelope_from_context(result.data, result.context)

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "contract_path": "packages/contracts/openapi.json",
+  "baseline": {
+    "git_ref": "HEAD",
+    "contract_blob": "51d24bd3b02c9e3d7deebcf6f4007d63e1649df7"
+  },
+  "approved_export_sha256": "3dc1f91450258328fc217ea6e9b8c8b69a6b6ed99f310ab1107f288d25691437",
+  "approved_diff_sha256": "62686e69243936c7bf20d5a15bb465cb81610b75c240402bb5a4ff679a7ff1ba",
+  "approved_summary_sha256": "f623166e0624d1f2048dcb36fa7af5701738b62ce200748592f3d4007c4eea54",
+  "breaking_hints_reviewed": true,
+  "review": {
+    "reviewed_on": "2026-08-13",
+    "reviewer": "release-review",
+    "reason": "Accept the generated concrete response schemas, new operations and documented validation/error response changes."
+  },
+  "change_list": {
+    "operations_added": [
+      "GET /api/data/scheduler/status",
+      "GET /api/settings/runtime",
+      "POST /api/portfolios/{portfolio_id}/positions/normalize"
+    ],
+    "schema_fields_added": ["FundFilterRequest.keyword"],
+    "constraints_tightened": [
+      "BacktestRequest.amount: exclusiveMinimum increased from unset to 0",
+      "FundCompareRequest.codes: minItems increased from 1 to 2"
+    ],
+    "response_codes_added": 16,
+    "schemas_added": 60
+  }
+}

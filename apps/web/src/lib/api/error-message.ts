@@ -5,8 +5,11 @@ const API_ERROR_GUIDANCE: Record<string, string> = {
   INVALID_RISK_ANSWERS: "请确认每一道风险测评题都已作答。",
   INVALID_DATE_RANGE: "开始日期不能晚于结束日期。",
   INVALID_PORTFOLIO_TEMPLATE: "请选择当前列表中的有效组合模板。",
+  INVALID_PORTFOLIO_WEIGHTS: "请先添加至少一条大于 0 的持仓权重。",
+  PORTFOLIO_HAS_UNAVAILABLE_POSITIONS: "请先移除已不在当前数据快照中的持仓，或重新同步基金数据后再试。",
   FUND_NOT_FOUND: "请刷新基金数据或改选仍然可用的基金。",
   PORTFOLIO_NOT_FOUND: "该组合可能已被删除，请刷新组合列表。",
+  BACKTEST_NOT_FOUND: "该回测记录不存在或已被清理，请重新运行回测。",
   AI_THREAD_NOT_FOUND: "原对话已不可用，请开始一个新对话。",
   UNKNOWN_DATA_SOURCE: "请在环境配置中选择已支持的数据源。",
   INTERNAL_SERVER_ERROR: "服务端暂时无法完成请求，请稍后重试并查看服务日志。"

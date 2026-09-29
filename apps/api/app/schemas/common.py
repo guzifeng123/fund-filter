@@ -7,7 +7,7 @@ T = TypeVar("T")
 
 class ApiMeta(BaseModel):
     source: str
-    data_updated_at: str
+    data_updated_at: str | None
     disclaimer: str
     pagination: dict[str, int] | None = None
 

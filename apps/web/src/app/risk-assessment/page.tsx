@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, ShieldCheck } from "lucide-react";
+import { Button } from "@/components/button";
 import { ComplianceNotice } from "@/components/compliance-notice";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
@@ -48,7 +49,7 @@ export default function RiskAssessmentPage() {
       {questionsQuery.isLoading ? <LoadingBlock /> : questionsQuery.isError ? (
         <ErrorState
           title="风险测评题目加载失败"
-          description="无法读取题库，当前不会生成或覆盖风险画像。"
+          description={getApiErrorMessage(questionsQuery.error, "无法读取题库，当前不会生成或覆盖风险画像。")}
           onRetry={() => void questionsQuery.refetch()}
         />
       ) : !questions.length ? (
@@ -64,27 +65,30 @@ export default function RiskAssessmentPage() {
                   {question.options.map((option) => {
                     const selected = answers[question.id] === option.score;
                     return (
-                      <button
+                      <Button
                         key={option.score}
-                        className={`focus-ring min-h-16 rounded-md border px-3 py-2 text-left text-sm ${selected ? "border-[var(--accent)] bg-[var(--accent-weak)]" : "border-[var(--border)] bg-[var(--background)] hover:bg-[var(--surface-muted)]"}`}
+                        variant="unstyled"
+                        size="none"
+                        aria-pressed={selected}
+                        className={`min-h-16 rounded-md border px-3 py-2 text-left text-sm ${selected ? "border-[var(--accent)] bg-[var(--accent-weak)]" : "border-[var(--border)] bg-[var(--background)] hover:bg-[var(--surface-muted)]"}`}
                         onClick={() => setAnswers((current) => ({ ...current, [question.id]: option.score }))}
                       >
                         <span className="block text-xs text-[var(--text-muted)]">{option.score} 分</span>
                         {option.label}
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>
               </div>
             ))}
-            <button
-              className="focus-ring inline-flex h-10 w-fit items-center gap-2 rounded-md bg-[var(--accent)] px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            <Button
+              className="w-fit"
               disabled={!canSubmit || mutation.isPending}
               onClick={() => mutation.mutate()}
             >
               <ShieldCheck className="h-4 w-4" />
               保存测评结果
-            </button>
+            </Button>
             {mutation.isError ? (
               <ErrorState
                 title="测评结果保存失败"
@@ -97,7 +101,7 @@ export default function RiskAssessmentPage() {
             {latestQuery.isError && !mutation.data ? (
               <ErrorState
                 title="历史测评加载失败"
-                description="仍可完成新测评，但当前无法读取最近一次风险画像。"
+                description={getApiErrorMessage(latestQuery.error, "仍可完成新测评，但当前无法读取最近一次风险画像。")}
                 onRetry={() => void latestQuery.refetch()}
               />
             ) : result ? (

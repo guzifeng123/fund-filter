@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 JobStatus = Literal["running", "success", "failed"]
 DataFreshnessStatus = Literal["empty", "fresh", "stale", "failed"]
+DataSyncTask = Literal["all", "profiles", "navs", "metrics", "risk_levels"]
 
 
 class LastJob(BaseModel):
@@ -25,9 +26,27 @@ class JobRunSummary(BaseModel):
 
 class DataStatus(BaseModel):
     db_connected: bool
+    source: str
     fund_count: int
     nav_count: int
     latest_data_updated_at: str | None
     freshness_status: DataFreshnessStatus
     stale_after_days: int
     last_job: LastJob | None
+
+
+class SchedulerStatus(BaseModel):
+    enabled: bool
+    running: bool
+    schedule_mode: Literal["interval", "cron"]
+    schedule_expression: str
+    timezone: str
+    jitter_seconds: int
+    misfire_grace_seconds: int
+    next_run_at: str | None
+    running_tasks: list[JobRunSummary]
+
+
+class DataSyncResult(BaseModel):
+    task: DataSyncTask
+    result: dict[str, Any]

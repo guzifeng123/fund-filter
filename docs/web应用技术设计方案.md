@@ -1,10 +1,16 @@
 # 基金分析 Web 应用技术设计方案
 
-文档版本：v1.0  
-日期：2026-07-08  
+文档版本：v1.3
+日期：2026-07-14
 应用定位：个人自用的基金分析与闲钱管理 Web 应用  
 目标用户：基金投资新手、希望用规则化方式管理闲钱的个人用户  
 默认工作目录：`C:\Users\39187\Desktop\基金`
+
+## 0. 当前实现状态
+
+截至 2026-07-17，核心页面、可编辑四步筛选、设置运行状态、完整投教内容、后端分层、数据库地基、风险测评、组合、回测、AI Gateway、真实 LLM provider 边界、聚合观测与事件保留清理、RAG、数据源 adapter、基金数据原子快照、质量脚本与本地运维均已基本落地。Playwright 已同时覆盖 mocked 主路径和真实 API 的基金/组合/回测/AI 四个合规表面，并输出机器视觉合同。仍处于后续阶段的内容包括：盈米 MCP、账号与多用户隔离、不可变历史 generation、生产级外部监控/告警投递和 LLM 事件清理自动调度/分区归档。
+
+当前状态、历史完成记录和剩余待办统一维护在 [待完成与版本任务规划.md](待完成与版本任务规划.md)。本文档保留为产品与技术设计基准，不再承载逐条任务追踪。
 
 ## 1. 背景与目标
 
@@ -56,7 +62,7 @@ v1 不实现以下能力：
 | UI 框架 | React 19 | 组件化 UI |
 | 类型系统 | TypeScript strict | 前端类型安全 |
 | 样式 | Tailwind CSS v4 | 设计 token、响应式布局和组件样式 |
-| 组件基础 | shadcn/ui | 基于 Radix 的无障碍组件基础 |
+| 组件基础 | 项目自定义语义组件 | `Button`、`Input`、`Select`、`Textarea`、`FormField` 等统一样式、状态和 ARIA 关联 |
 | 图标 | lucide-react | 按钮、导航、状态和工具图标 |
 | 服务端状态 | TanStack Query | API 请求、缓存、重试和加载状态 |
 | 表格 | TanStack Table | 基金列表、比较表和回测明细 |
@@ -264,7 +270,7 @@ jobs
 
 ### 4.7 `/assistant`
 
-AI 分析助手页：
+AI 分析助手页的产品目标：
 
 - 自然语言筛选基金。
 - 解释指标含义。
@@ -273,12 +279,16 @@ AI 分析助手页：
 - 解读回测结果。
 - 回答投教问题。
 
+当前已有专门数据读取路径的是 `context.fund_code` 基金解释、`context.backtest_id` 回测解释和 RAG 投教问答。自然语言筛选基金与基于 `portfolio_id` 的组合诊断仍是后续目标；页面入口或任意 `context` 字段本身不代表能力已经落地。
+
 所有回答都必须附：
 
 - 使用的数据日期。
-- 数据来源。
+- 数据来源（JSON `/api/ai/chat` 由外层 API envelope 的 `meta.source` 提供，不属于 `ChatResponse` 字段）。
 - 合规免责声明。
 - 无法回答或数据不足时的明确说明。
+
+`/api/ai/chat/stream` 的最终 SSE 事件同时携带 `response: ChatResponse` 与外层 `meta`，其中包含实际基金数据来源、可推导的数据更新时间和统一免责声明；中间 chunk 只承载展示文本。
 
 ### 4.8 `/learn`
 
@@ -304,7 +314,7 @@ AI 分析助手页：
 
 ### 5.1 组件策略
 
-项目使用 shadcn/ui 作为基础组件来源，但业务页面不得直接堆叠原始 shadcn 组件。必须通过项目自定义组件暴露统一样式和行为。
+项目直接维护轻量的语义组件层。业务页面必须优先使用项目自定义组件暴露统一样式、默认行为和 ARIA 关联；新增复杂交互组件时再评估成熟无障碍库，不能在文档中把未安装的组件库写成当前依赖。
 
 示例：
 
@@ -323,6 +333,9 @@ AI 分析助手页：
 | `ErrorState` | API 失败、数据源失败、AI 失败 |
 | `LoadingBlock` | 页面和图表加载态 |
 | `MetricExplainTooltip` | 指标解释 |
+| `Button` | 统一按钮变体、尺寸、默认 `type=button` 和焦点状态 |
+| `Input` / `Select` / `Textarea` | 统一表单控件样式、禁用态和 ARIA 属性 |
+| `FormField` | 统一 label、description、error 与控件 ID 关联 |
 
 ### 5.3 领域组件
 
@@ -376,10 +389,10 @@ AI 分析助手页：
 
 用户首次使用必须完成风险测评：
 
-- 题目数量：5-8 道。
+- 当前题库：6 道；提交时必须覆盖当前全部题目 ID，且同一 `question_id` 只能出现一次。请求 schema 预留 5-8 道扩展范围。
 - 输出结果：C1-C5。
-- 有效期：12 个月。
-- 到期前 30 天提醒重新测评。
+- 有效期：从 `assessed_at` 起固定 365 天；API 根据存储的测评时间派生 `effective_from`、`effective_to` 和 `is_expired`，数据库不保存起止日期列。
+- 到期前 30 天（含）返回 `expires_soon=true` 并提醒重新测评。设置页显示的“12 个月”是 `365 / 30` 四舍五入后的展示值，不是按自然月计算。
 
 匹配规则：
 
@@ -402,10 +415,10 @@ AI 分析助手页：
 
 默认条件：
 
-- 成立年限不少于 3 年。
+- 成立年限不少于 3 年；按基金 `inception_date` 到请求处理日的完整年数计算，不使用基金经理任职年限。查询实现先计算包含边界的成立日 cutoff，遇到 2 月 29 日回退到目标非闰年的 2 月 28 日。
 - 基金规模建议 10-100 亿。
 - 收益排名默认取同类前 30%。
-- 最大回撤不高于同类平均。
+- 最大回撤幅度不劣于同类平均。内部最大回撤使用负数百分比，因此同类型基金均值为 `-10%` 时，`-8%` 应保留，查询条件为基金值 `>=` 同类均值。请求字段 `max_drawdown_lte_category_avg` 中的 `lte` 描述回撤幅度，不是负数存储值的数值比较方向；字段为 `false` 时不应用此条件。
 - 夏普比率默认不低于 1.2。
 - 管理费默认不高于 1.5%。
 
@@ -433,6 +446,8 @@ AI 分析助手页：
 - 任一资产类别偏离目标比例超过 `5%` 时，生成再平衡预览。
 - 预览只展示“需要调回目标比例”的信息，不给出强制交易指令。
 - 所有建议使用“可考虑”“用于恢复比例”这类非指令性表达。
+- 已持有基金从 active snapshot 移除时保留用户持仓，并返回 `available=false`、`availability_reason=removed_from_active_snapshot` 与 `unavailable_position_count`；用户仍可删除该持仓。
+- 存在不可用持仓时禁止归一化和再平衡预览，统一返回 `409 PORTFOLIO_HAS_UNAVAILABLE_POSITIONS`，`error.detail` 包含 `availability_reason` 与 `unavailable_fund_codes`，不得使用旧基金分类推导当前股债比例。
 
 ### 6.5 回测
 
@@ -450,6 +465,8 @@ AI 分析助手页：
 - 基于实时估值的套利策略。
 - 自动交易策略。
 
+回测结果默认主口径保持资金加权收益率 XIRR：`annualized_return` 与 `money_weighted_return` 均按每笔投入现金流日期和期末市值计算。结果同时返回 `time_weighted_return`，用于剔除中途投入影响后观察资产本身历史表现；前端结果区需同屏展示“资金加权”和“时间加权”，并说明二者差异，不得把任一收益口径包装成未来收益预测。
+
 ## 7. API 设计
 
 ### 7.1 API 约定
@@ -462,8 +479,8 @@ AI 分析助手页：
 {
   "data": {},
   "meta": {
-    "source": "yingmi_mcp",
-    "data_updated_at": "2026-07-08T20:30:00+08:00",
+    "source": "eastmoney_snapshot",
+    "data_updated_at": "2026-07-13T20:30:00+08:00",
     "disclaimer": "本工具基于历史数据，仅供分析学习，不构成投资建议。"
   }
 }
@@ -506,6 +523,8 @@ AI 分析助手页：
 }
 ```
 
+筛选合同补充：`min_years` 对应基金成立年限；`max_drawdown_lte_category_avg=true` 按数据库内相同 `fund_type` 且已有指标的基金计算最大回撤平均值，并保留回撤幅度不劣于该均值的基金。最大回撤采用负数口径，因此实现比较方向为 `>=`；传 `false` 时不做同类回撤过滤。
+
 ### 7.3 风险测评接口
 
 | 方法 | 路径 | 用途 |
@@ -520,7 +539,14 @@ AI 分析助手页：
 | GET | `/api/portfolios` | 获取组合列表 |
 | POST | `/api/portfolios` | 创建组合 |
 | GET | `/api/portfolios/{id}` | 组合详情 |
+| PATCH | `/api/portfolios/{id}` | 更新组合名称 |
+| DELETE | `/api/portfolios/{id}` | 删除组合 |
+| PUT | `/api/portfolios/{id}/positions` | 新增或更新当前 active 基金持仓 |
+| DELETE | `/api/portfolios/{id}/positions/{fund_code}` | 删除持仓，包括不可用持仓 |
+| POST | `/api/portfolios/{id}/positions/normalize` | 原子归一化持仓权重 |
 | POST | `/api/portfolios/{id}/rebalance-preview` | 再平衡预览 |
+
+列表/详情的 `unavailable_position_count`，以及详情 `positions[].available` / `positions[].availability_reason` 为必填派生字段。归一化和再平衡在存在不可用持仓时返回 `409 PORTFOLIO_HAS_UNAVAILABLE_POSITIONS`，并在 `error.detail.unavailable_fund_codes` 返回不可用基金代码列表。
 
 ### 7.5 回测接口
 
@@ -529,11 +555,14 @@ AI 分析助手页：
 | POST | `/api/backtests` | 创建回测 |
 | GET | `/api/backtests/{id}` | 获取回测结果 |
 
+基金搜索、筛选、比较、详情和净值接口在 repository 层解析一次 active generation，并用同一 generation 上下文返回 payload、`meta.source` 与 `meta.data_updated_at`。回测创建时同样先解析一次 generation 加载 NAV，结果中的 `snapshot_generation_id` 持久化在 `backtest_runs.result_snapshot`；历史回测详情按该 generation 返回来源和更新时间。
+
 ### 7.6 AI 接口
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
-| POST | `/api/ai/chat` | AI 对话，SSE 流式返回 |
+| POST | `/api/ai/chat` | AI 对话，返回结构化 JSON |
+| POST | `/api/ai/chat/stream` | AI 对话，SSE 分块并在最终事件返回完整结构化响应 |
 | GET | `/api/ai/threads` | 对话列表 |
 | GET | `/api/ai/threads/{id}` | 对话详情 |
 
@@ -544,22 +573,30 @@ AI 分析助手页：
   "thread_id": "optional-thread-id",
   "message": "帮我解释这只基金为什么最大回撤比较高",
   "context": {
-    "fund_codes": ["000001"],
-    "portfolio_id": null,
+    "fund_code": "000001",
     "page": "fund_detail"
   }
 }
 ```
 
-AI 响应必须包含：
+`POST /api/ai/chat` 的运行时响应固定包含以下字段：
 
-- 结论。
-- 数据依据。
-- 数据日期。
-- 风险提示。
-- 不足与限制。
+| 字段 | 含义 |
+| --- | --- |
+| `thread_id` | 持久化后的线程 ID；`ChatResponse` schema 允许为 `null`，但保存成功后会写入实际 ID。 |
+| `conclusion` | 结论摘要。 |
+| `evidence` | 数据依据列表。 |
+| `references` | 基金、指标、回测或 RAG 文档引用列表；无法引用时为空数组。 |
+| `risk` | 风险与局限说明。 |
+| `data_date` | 本次回答采用的数据日期。 |
+| `disclaimer` | AI 专用免责声明。 |
+| `unable_to_answer` | 因数据缺失或合规 guardrail 无法回答时为 `true`。 |
+
+`context` 当前有专门读取逻辑的键为单只基金的 `fund_code` 和已持久化回测的 `backtest_id`；其他键可随请求传入，但不能据此宣称已实现相应业务诊断。
 
 ## 8. 数据模型
+
+本节按 `apps/api/app/db/models.py` 与 Alembic 当前 head `0009_add_llm_provider_events` 记录已落库结构；字段级说明以《数据字典》为准。未来概念与已实现表分开列示，不能把页面占位字段或设计名称当作数据库合同。
 
 ### 8.1 核心表
 
@@ -568,78 +605,54 @@ AI 响应必须包含：
 | `funds` | 基金基础信息 |
 | `fund_navs` | 基金历史净值 |
 | `fund_metrics` | 收益、回撤、夏普、分位等指标 |
+| `fund_data_snapshots` | 完整基金数据 generation 的来源、状态和计数 |
+| `fund_data_snapshot_state` | 单例 active generation 指针 |
 | `risk_assessments` | 用户风险测评结果 |
 | `portfolios` | 组合基础信息 |
 | `portfolio_positions` | 组合持仓 |
-| `portfolio_snapshots` | 组合每日快照 |
 | `backtest_runs` | 回测配置和结果 |
-| `watchlists` | 自选基金 |
-| `alerts` | 净值异动和风险提醒 |
+| `job_runs` | 数据任务运行记录与同名运行锁 |
 | `ai_threads` | AI 对话线程 |
 | `ai_messages` | AI 对话消息 |
 | `documents` | 投教或说明文档 |
 | `document_chunks` | 文档切片和向量 |
-| `job_runs` | 数据任务运行记录 |
+| `llm_provider_events` | 真实 provider 请求的最小化可观测事件 |
 
 ### 8.2 关键字段
 
-`funds`：
+| 表 | 当前实际字段 |
+| --- | --- |
+| `funds` | `code`, `name`, `fund_type`, `risk_level`, `manager_name`, `inception_date`, `fund_size_billion`, `management_fee`, `custody_fee`, `source`, `data_updated_at`, `ai_summary`, `raw_data`, `snapshot_generation_id`, `created_at`, `updated_at` |
+| `fund_navs` | `id`, `fund_code`, `trade_date`, `trade_date_precision`, `nav`, `accumulated_nav`, `raw_data`, `snapshot_generation_id` |
+| `fund_metrics` | `fund_code`, `annualized_return_3y`, `annualized_return_5y`, `max_drawdown`, `sharpe_ratio`, `category_rank_percentile`, `manager_years`, `raw_data`, `snapshot_generation_id`, `updated_at` |
+| `fund_data_snapshots` | `generation_id`, `source`, `status`, `fund_count`, `nav_count`, `metric_count`, `created_at`, `promoted_at` |
+| `fund_data_snapshot_state` | `id=1`, `active_generation_id`, `updated_at` |
+| `risk_assessments` | `id`, `user_id`, `risk_profile`, `answers`, `assessed_at` |
+| `portfolios` | `id`, `user_id`, `name`, `template_key`, `stock_ratio`, `bond_ratio`, `config`, `created_at`, `updated_at` |
+| `portfolio_positions` | `id`, `portfolio_id`, `fund_code`, `weight_percent`, `metadata`（ORM 属性名 `metadata_`） |
+| `backtest_runs` | `id`, `user_id`, `strategy_type`, `request_payload`, `result_snapshot`, `annualized_return`, `max_drawdown`, `volatility`, `created_at` |
+| `job_runs` | `id`, `name`, `status`, `started_at`, `finished_at`, `details` |
+| `ai_threads` | `id`, `user_id`, `title`, `created_at`, `updated_at` |
+| `ai_messages` | `id`, `thread_id`, `role`, `content`, `payload`, `created_at` |
+| `documents` | `id`, `title`, `source_uri`, `document_type`, `content_hash`, `metadata`（ORM 属性名 `metadata_`）, `created_at`, `updated_at` |
+| `document_chunks` | `id`, `document_id`, `chunk_index`, `content`, `embedding`, `metadata`（ORM 属性名 `metadata_`）, `created_at` |
+| `llm_provider_events` | `id`, `provider_name`, `model_name`, `outcome`, `attempt_count`, `retry_count`, `latency_ms`, `timed_out`, `error_category`, `created_at` |
 
-- `code`
-- `name`
-- `fund_type`
-- `risk_level`
-- `manager_name`
-- `inception_date`
-- `fund_size_billion`
-- `management_fee`
-- `custody_fee`
-- `source`
-- `raw_payload`
+风险测评响应中的 `effective_from`、`effective_to`、`expires_soon`、`is_expired` 和 `explanation` 均由 repository/schema 根据 `assessed_at` 派生，不是 `risk_assessments` 的数据库列。类似地，基金净值没有 `daily_return`、`source`、`fetched_at` 列；基金指标也没有通用 `period`、`annualized_return`、`volatility`、`pe_pb_percentile` 或 `calculated_at` 列。回测的 `snapshot_generation_id` 是 `result_snapshot` 内的响应/审计字段，不是 `backtest_runs` 的独立列。
 
-`fund_navs`：
+### 8.3 尚未落库的未来概念
 
-- `fund_code`
-- `trade_date`
-- `nav`
-- `accumulated_nav`
-- `daily_return`
-- `source`
-- `fetched_at`
-
-`fund_metrics`：
-
-- `fund_code`
-- `period`
-- `annualized_return`
-- `max_drawdown`
-- `volatility`
-- `sharpe_ratio`
-- `category_rank_percentile`
-- `pe_pb_percentile`
-- `calculated_at`
-
-`risk_assessments`：
-
-- `user_id`
-- `risk_profile`
-- `answers`
-- `effective_from`
-- `effective_to`
-
-`backtest_runs`：
-
-- `strategy_type`
-- `config`
-- `result`
-- `benchmark_code`
-- `created_at`
+| 概念 | 当前边界 |
+| --- | --- |
+| `portfolio_snapshots` | 仅代表未来的组合每日快照设计；当前没有 ORM model、Alembic 表或读写 API。组合回测结果存于 `backtest_runs.result_snapshot`，不能等同于组合每日快照。 |
+| `watchlists` / watchlist | 仅代表未来的自选基金能力；当前没有持久化表。Dashboard 的 `watchlist_updated_at=null`、`watchlist_status=not_configured` 是能力状态占位，不是 watchlist 数据。 |
+| `alerts` / alert | 仅代表未来的业务提醒能力；当前没有持久化表。Dashboard 固定返回空 `alerts` 与 `alerts_status=not_configured`；发布产物中的 artifact alerts 是质量报告，和业务提醒无关。 |
 
 ## 9. AI 分析助手设计
 
 ### 9.1 能力范围
 
-v1 支持：
+v1 设计范围：
 
 - 自然语言筛选基金。
 - 基金指标解释。
@@ -647,6 +660,8 @@ v1 支持：
 - 组合风险诊断。
 - 回测结果解释。
 - 投教问答。
+
+截至当前版本，基金指标/历史摘要、已持久化回测解释和 RAG 投教问答已有专门读取路径；自然语言筛选与组合诊断尚无对应 service/repository 实现，仍属于设计目标。
 
 v1 不支持：
 
@@ -664,9 +679,14 @@ v1 不支持：
 - 注入系统提示词。
 - 注入合规边界。
 - 执行 RAG 检索。
-- 记录输入输出。
+- 在 `ai_messages` 中持久化产品对话消息。
+- 在 `llm_provider_events` 中记录不含 prompt/响应正文的 provider 可观测元数据。
 - 屏蔽敏感配置。
 - 统一错误处理。
+
+当前实现中，`LLM_PROVIDER=mock` 时继续走确定性本地回答；非 mock 时走 OpenAI-compatible `/chat/completions`，并带超时、有限重试、base URL 安全校验、跨源重定向阻断、响应 body/输出长度硬上限、基础敏感信息脱敏和输出后置合规检查。模型文本若包含强交易指令、收益保证、择时信号或确定性未来预测，会被丢弃并回退确定性合规回答。
+
+真实 provider 每次调用最多生成一条 `llm_provider_events` 请求级事件，记录净化后的 provider/model、结果、尝试/重试次数、总延迟、超时和白名单错误类别，不保存用户问题、RAG 依据、模型回答、异常原文、URL 或凭据。请求线程只向固定容量队列非阻塞入队，单 worker 独立事务落库；worker 异常退出后仅在同一 dispatcher 的同一有界队列上受控重启，关闭超时后丢弃尚未开始处理的队列遗留事件并计入安全汇总，不回退到聊天请求线程同步写库。`GET /api/settings/runtime` 按当前 provider/model 返回最近窗口请求率、成功率、错误率、重试率、超时率、阈值状态和后台写入队列健康摘要。`LLM_OBSERVABILITY_RETENTION_DAYS` 控制事件保留天数，`scripts/cleanup_llm_provider_events.py` 默认 dry-run 并可输出 JSON 清理报告，显式 `--apply` 后才删除旧事件。生产化后续是外部告警投递、去重冷却、自动调度、分区/归档和规模化索引，而不是再次实现数据库事件表。
 
 ### 9.3 RAG 数据来源
 
@@ -686,16 +706,19 @@ v1 不支持：
 
 ### 9.4 AI 输出模板
 
-AI 对基金或组合的分析输出统一包含：
+AI 对基金、回测或投教问题的结构化输出与 `ChatResponse` 保持一致：
 
 ```text
-结论摘要
-数据依据
-风险点
-适合进一步查看的指标
-数据日期
-免责声明
+conclusion          结论摘要
+evidence[]          数据依据
+references[]        可核验引用
+risk                风险与局限
+data_date           数据日期
+disclaimer          AI 免责声明
+unable_to_answer    是否无法回答
 ```
+
+展示层可以把这些字段排版为自然语言栏目，但不得删除 `references`、`data_date`、`disclaimer` 或 `unable_to_answer`，也不得另造一个当前 schema 不存在的“适合进一步查看的指标”必填字段。
 
 ## 10. 数据刷新与任务设计
 
@@ -703,10 +726,8 @@ AI 对基金或组合的分析输出统一包含：
 
 | 任务 | 频率 | 说明 |
 | --- | --- | --- |
-| `sync_fund_navs` | 交易日 15:30 后，20:30 补偿 | 获取历史净值 |
-| `sync_fund_profiles` | 每日一次 | 更新基金基础信息 |
-| `calculate_metrics` | 每日净值同步后 | 计算收益、回撤、夏普等 |
-| `sync_risk_levels` | 每日一次 | 更新风险等级 |
+| `sync_all` | 每日或交易日收盘后 | 单次读取完整来源快照，在一个事务中写入并原子晋升 generation |
+| `sync_fund_navs` / `sync_fund_profiles` / `calculate_metrics` / `sync_risk_levels` | 手动兼容入口 | 保留任务名，但实际 `effective_scope=full_snapshot`，不原地拼接 active generation |
 | `refresh_embeddings` | 文档变化时 | 更新投教向量 |
 | `cleanup_job_runs` | 每周一次 | 清理过旧任务记录 |
 
@@ -715,6 +736,8 @@ AI 对基金或组合的分析输出统一包含：
 - 任务必须幂等。
 - 每次运行写入 `job_runs`。
 - 数据源失败不覆盖已有数据。
+- 完整候选必须通过基金/NAV/metric 计数及父子 generation 一致性校验，最后一步才切换单例 active 指针。
+- 基金读取把 active 指针嵌入数据 SQL，避免晋升发生在两条读取语句之间时返回被移除的残留行。
 - 前端必须可见数据过期状态。
 - 数据同步失败时展示降级提示。
 
@@ -822,6 +845,14 @@ Playwright 主路径：
 7. 运行一次定投回测。
 8. 打开 AI 助手解释回测结果。
 
+当前已提供 CI 友好的 `@playwright/test` 入口：
+
+```powershell
+npm.cmd --workspace apps/web run e2e
+```
+
+`apps/web/e2e/main-flow.spec.ts` 使用 mocked API 覆盖主路径；`accessibility.spec.ts` 对 9 个桌面路由、基金/AI 移动端和组合不可用持仓分支执行 axe WCAG A/AA 自动审计；`real-api.spec.ts` 连接自动迁移与 seed 的真实 FastAPI，覆盖基金、组合、回测和 AI 的来源、更新时间、免责声明与关键图表。Windows 启动器默认选择空闲 Web/API 端口，保留服务 stdout/stderr 和 JSON 启动汇总；失败时 trace、截图、视频和 HTML report 输出到 `output/playwright`，成功时额外校验 `real-api-visual-check.json`。自动 axe 不替代键盘、缩放、高对比度和屏幕阅读器人工验收；真实 API 当前只覆盖 Desktop Chrome。
+
 ### 12.5 视觉验收
 
 桌面端和移动端都要检查：
@@ -912,7 +943,8 @@ v1 完成时必须满足：
 - [Next.js Documentation](https://nextjs.org/docs)
 - [React Documentation](https://react.dev)
 - [Tailwind CSS Documentation](https://tailwindcss.com/docs)
-- [shadcn/ui Documentation](https://ui.shadcn.com/docs)
+- [WAI-ARIA Authoring Practices](https://www.w3.org/WAI/ARIA/apg/)
+- [axe-core Documentation](https://github.com/dequelabs/axe-core)
 - [FastAPI Documentation](https://fastapi.tiangolo.com)
 - [SQLAlchemy Documentation](https://docs.sqlalchemy.org)
 - [Alembic Documentation](https://alembic.sqlalchemy.org)
@@ -927,4 +959,3 @@ v1 完成时必须满足：
 
 - `C:\Users\39187\Desktop\有空看\个股分析软件功能需求.pdf`
 - `C:\Users\39187\Desktop\有空看\基金分析软件设计.pdf`
-

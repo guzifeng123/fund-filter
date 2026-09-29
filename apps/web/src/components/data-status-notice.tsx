@@ -13,7 +13,9 @@ export function DataStatusNotice({ status }: { status: DataStatus | null | undef
     },
     stale: {
       title: "数据已超过新鲜度阈值",
-      description: `最近数据已超过 ${status.stale_after_days} 天，请同步后再用于分析。`
+      description: status.last_job?.status === "success"
+        ? `最近一次同步已成功完成${status.last_job.finished_at ? `（${status.last_job.finished_at.replace("T", " ").slice(0, 16)}）` : ""}，但上游最新数据仍停留在 ${status.latest_data_updated_at?.slice(0, 10) ?? "未知日期"}，已超过 ${status.stale_after_days} 天。请检查数据源是否仍提供旧快照。`
+        : `最近数据已超过 ${status.stale_after_days} 天，请同步后再用于分析。`
     },
     failed: {
       title: "最近一次数据同步失败",

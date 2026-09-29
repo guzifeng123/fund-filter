@@ -1,0 +1,173 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://fund-analysis.local/contracts/cleanup-report.schema.json",
+  "title": "Generated artifact cleanup report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ok",
+    "what_if",
+    "started_at",
+    "finished_at",
+    "duration_ms",
+    "workspace_root",
+    "cleanup_mode",
+    "fixed_targets_only",
+    "pattern_targets_only",
+    "search_roots",
+    "exclude_directories",
+    "include_extensions",
+    "exclude_patterns",
+    "skipped_roots",
+    "skipped_pattern_items",
+    "matched_items",
+    "removed_items",
+    "matched_item_details",
+    "removed_item_details",
+    "matched_by_type",
+    "removed_by_type",
+    "matched_count",
+    "removed_count"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "what_if": {
+      "type": "boolean"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "workspace_root": {
+      "type": "string",
+      "minLength": 1
+    },
+    "cleanup_mode": {
+      "enum": ["all", "fixed", "pattern"]
+    },
+    "fixed_targets_only": {
+      "type": "boolean"
+    },
+    "pattern_targets_only": {
+      "type": "boolean"
+    },
+    "search_roots": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "exclude_directories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "include_extensions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^\\."
+      }
+    },
+    "exclude_patterns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "skipped_roots": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "skipped_pattern_items": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "matched_items": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "removed_items": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "matched_item_details": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/item_detail"
+      }
+    },
+    "removed_item_details": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/item_detail"
+      }
+    },
+    "matched_by_type": {
+      "$ref": "#/definitions/type_summary"
+    },
+    "removed_by_type": {
+      "$ref": "#/definitions/type_summary"
+    },
+    "matched_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "removed_count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "definitions": {
+    "item_detail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "type"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": ["fixed", "log", "pycache", "egg-info", "directory", "other"]
+        }
+      }
+    },
+    "type_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixed", "log", "pycache", "egg-info", "directory", "other"],
+      "properties": {
+        "fixed": { "type": "integer", "minimum": 0 },
+        "log": { "type": "integer", "minimum": 0 },
+        "pycache": { "type": "integer", "minimum": 0 },
+        "egg-info": { "type": "integer", "minimum": 0 },
+        "directory": { "type": "integer", "minimum": 0 },
+        "other": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

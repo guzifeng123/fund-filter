@@ -146,6 +146,7 @@ if ($JsonReportPath) {
   }
 
   [ordered]@{
+    schema_version = 1
     ok = $true
     started_at = $startedAt.ToUniversalTime().ToString("o")
     finished_at = $finishedAt.ToUniversalTime().ToString("o")

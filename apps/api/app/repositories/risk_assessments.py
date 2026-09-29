@@ -3,78 +3,89 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from app.db.models import RiskAssessment
-from app.schemas.risk_assessment import RiskAnswer, RiskAssessmentResult, RiskProfile, RiskQuestion
+from app.db.models import RiskAssessment, StoredRiskAnswer, StoredRiskAssessmentAnswers
+from app.schemas.risk_assessment import (
+    RiskAnswer,
+    RiskAssessmentResult,
+    RiskProfile,
+    RiskQuestion,
+    RiskQuestionOption,
+)
 
 VALID_DAYS = 365
 EXPIRES_SOON_DAYS = 30
+
+
+def _options(*values: tuple[int, str]) -> list[RiskQuestionOption]:
+    return [RiskQuestionOption(score=score, label=label) for score, label in values]
+
 
 RISK_QUESTIONS: list[RiskQuestion] = [
     RiskQuestion(
         id="horizon",
         title="这笔资金预计多久不会用于日常支出？",
-        options=[
-            {"score": 1, "label": "3 个月以内"},
-            {"score": 2, "label": "3-12 个月"},
-            {"score": 3, "label": "1-3 年"},
-            {"score": 4, "label": "3-5 年"},
-            {"score": 5, "label": "5 年以上"},
-        ],
+        options=_options(
+            (1, "3 个月以内"),
+            (2, "3-12 个月"),
+            (3, "1-3 年"),
+            (4, "3-5 年"),
+            (5, "5 年以上"),
+        ),
     ),
     RiskQuestion(
         id="drawdown_tolerance",
         title="如果组合短期下跌，你能接受的最大波动大约是？",
-        options=[
-            {"score": 1, "label": "几乎不能亏损"},
-            {"score": 2, "label": "5% 以内"},
-            {"score": 3, "label": "10% 以内"},
-            {"score": 4, "label": "20% 以内"},
-            {"score": 5, "label": "20% 以上也可承受"},
-        ],
+        options=_options(
+            (1, "几乎不能亏损"),
+            (2, "5% 以内"),
+            (3, "10% 以内"),
+            (4, "20% 以内"),
+            (5, "20% 以上也可承受"),
+        ),
     ),
     RiskQuestion(
         id="income_stability",
         title="你的收入稳定性如何？",
-        options=[
-            {"score": 1, "label": "不稳定且现金流紧张"},
-            {"score": 2, "label": "略有波动"},
-            {"score": 3, "label": "基本稳定"},
-            {"score": 4, "label": "稳定且有结余"},
-            {"score": 5, "label": "非常稳定且结余充足"},
-        ],
+        options=_options(
+            (1, "不稳定且现金流紧张"),
+            (2, "略有波动"),
+            (3, "基本稳定"),
+            (4, "稳定且有结余"),
+            (5, "非常稳定且结余充足"),
+        ),
     ),
     RiskQuestion(
         id="investment_experience",
         title="你对基金和净值波动的熟悉程度是？",
-        options=[
-            {"score": 1, "label": "刚开始了解"},
-            {"score": 2, "label": "买过低风险产品"},
-            {"score": 3, "label": "买过债基或混合基金"},
-            {"score": 4, "label": "经历过权益基金波动"},
-            {"score": 5, "label": "长期管理多类资产"},
-        ],
+        options=_options(
+            (1, "刚开始了解"),
+            (2, "买过低风险产品"),
+            (3, "买过债基或混合基金"),
+            (4, "经历过权益基金波动"),
+            (5, "长期管理多类资产"),
+        ),
     ),
     RiskQuestion(
         id="liquidity_need",
         title="这笔资金对流动性的要求是？",
-        options=[
-            {"score": 1, "label": "随时可能使用"},
-            {"score": 2, "label": "半年内可能使用"},
-            {"score": 3, "label": "保留部分即可"},
-            {"score": 4, "label": "大部分可长期安排"},
-            {"score": 5, "label": "基本无短期流动性要求"},
-        ],
+        options=_options(
+            (1, "随时可能使用"),
+            (2, "半年内可能使用"),
+            (3, "保留部分即可"),
+            (4, "大部分可长期安排"),
+            (5, "基本无短期流动性要求"),
+        ),
     ),
     RiskQuestion(
         id="goal_priority",
         title="你更看重哪类目标？",
-        options=[
-            {"score": 1, "label": "本金稳定"},
-            {"score": 2, "label": "小幅增值"},
-            {"score": 3, "label": "稳健增长"},
-            {"score": 4, "label": "提升长期收益"},
-            {"score": 5, "label": "接受波动争取更高长期收益"},
-        ],
+        options=_options(
+            (1, "本金稳定"),
+            (2, "小幅增值"),
+            (3, "稳健增长"),
+            (4, "提升长期收益"),
+            (5, "接受波动争取更高长期收益"),
+        ),
     ),
 ]
 
@@ -107,7 +118,7 @@ def _result(row: RiskAssessment) -> RiskAssessmentResult:
         assessed_at = assessed_at.replace(tzinfo=timezone.utc)
     effective_to = assessed_at + timedelta(days=VALID_DAYS)
     now = datetime.now(timezone.utc)
-    profile = row.risk_profile  # type: ignore[assignment]
+    profile: RiskProfile = row.risk_profile
     score = int(row.answers.get("score", 0))
     return RiskAssessmentResult(
         risk_profile=profile,
@@ -148,13 +159,17 @@ def submit_assessment(
 
     score = sum(answer.score for answer in answers)
     profile = score_to_profile(score)
+    stored_answers: StoredRiskAssessmentAnswers = {
+        "score": score,
+        "items": [
+            StoredRiskAnswer(question_id=answer.question_id, score=answer.score)
+            for answer in answers
+        ],
+    }
     row = RiskAssessment(
         user_id=user_id,
         risk_profile=profile,
-        answers={
-            "score": score,
-            "items": [answer.model_dump() for answer in answers],
-        },
+        answers=stored_answers,
         assessed_at=datetime.now(timezone.utc),
     )
     db.add(row)

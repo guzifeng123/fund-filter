@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "ok": false,
+  "manifest_ok": false,
+  "alerts_ok": false,
+  "fail_on_alerts": true,
+  "started_at": "2026-07-12T00:00:00.0000000Z",
+  "finished_at": "2026-07-12T00:00:01.0000000Z",
+  "git_commit": "0000000000000000000000000000000000000000",
+  "run_directory": "output/release-artifacts/example-run",
+  "alert_count": 2,
+  "alerts": [
+    {
+      "type": "missing_required_artifact",
+      "severity": "error",
+      "message": "Missing required artifact: output/smoke/api-smoke.json",
+      "source": "output/smoke/api-smoke.json",
+      "destination": null
+    },
+    {
+      "type": "failed_artifact_report",
+      "severity": "error",
+      "message": "Failed artifact report: output/checks/cleanup-report.json",
+      "source": "output/checks/cleanup-report.json",
+      "destination": "output/release-artifacts/example-run/output/checks/cleanup-report.json"
+    }
+  ]
+}

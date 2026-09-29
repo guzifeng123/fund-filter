@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "api_base": "http://localhost:8000",
+  "started_at": "2026-07-12T00:00:00.0000000Z",
+  "finished_at": "2026-07-12T00:00:01.0000000Z",
+  "duration_ms": 1000,
+  "seed_if_empty": false,
+  "require_fresh": true,
+  "ok": true,
+  "environment": {
+    "os": "Microsoft Windows 10.0.00000",
+    "powershell_version": "7.5.0",
+    "node_version": "v22.0.0",
+    "npm_version": "10.0.0",
+    "git_commit": "0000000000000000000000000000000000000000",
+    "openapi_commit": "0000000000000000000000000000000000000000",
+    "openapi_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "steps": [
+    {
+      "name": "GET /health",
+      "ok": true,
+      "duration_ms": 20,
+      "error": null
+    },
+    {
+      "name": "GET /api/data/status",
+      "ok": true,
+      "duration_ms": 30,
+      "error": null
+    },
+    {
+      "name": "Validate data freshness",
+      "ok": true,
+      "duration_ms": 0,
+      "error": null
+    }
+  ],
+  "summary": {
+    "db_connected": true,
+    "fund_count": 3,
+    "nav_count": 12,
+    "freshness_status": "fresh",
+    "latest_data_updated_at": "2026-07-12T00:00:00Z",
+    "filter_result_count": 2
+  }
+}

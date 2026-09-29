@@ -11,12 +11,14 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-from app.db.vector import PgVector
-
 revision: str = "0003_create_rag_documents"
 down_revision: str | None = "0002_create_ai_threads"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
+
+
+def json_type() -> sa.types.TypeEngine[object]:
+    return postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), "sqlite")
 
 
 def upgrade() -> None:
@@ -27,7 +29,7 @@ def upgrade() -> None:
         sa.Column("source_uri", sa.String(length=500), nullable=False),
         sa.Column("document_type", sa.String(length=64), nullable=False),
         sa.Column("content_hash", sa.String(length=64), nullable=False),
-        sa.Column("metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("metadata", json_type(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
@@ -39,8 +41,8 @@ def upgrade() -> None:
         sa.Column("document_id", sa.String(length=64), nullable=False),
         sa.Column("chunk_index", sa.Integer(), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
-        sa.Column("embedding", PgVector(16), nullable=False),
-        sa.Column("metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("embedding", json_type(), nullable=False),
+        sa.Column("metadata", json_type(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["document_id"], ["documents.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),

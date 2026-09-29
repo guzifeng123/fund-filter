@@ -1,38 +1,107 @@
+from dataclasses import dataclass
 from datetime import date, datetime
+from typing import Generic, TypeVar
 
-from sqlalchemy import asc, desc, func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.sql.elements import SQLColumnExpression, UnaryExpression
 
-from app.core.compliance import is_risk_matched
+from app.core.compliance import RISK_PROFILE_LIMITS, is_risk_matched
+from app.core.config import settings
+from app.core.nav_dates import nav_trade_date_precision
+from app.core.nav_quality import NavQualityWarningPayload, validate_fund_navs
 from app.db.models import Fund as FundModel
-from app.db.models import FundMetric, FundNav
+from app.db.models import FundMetric, FundNav, JsonObject, JsonValue
+from app.repositories.fund_snapshots import (
+    active_snapshot_generation_expression,
+    active_snapshot_generation_id,
+)
 from app.schemas.funds import (
     FeeSummary,
     Fund,
     FundDetail,
     FundFilterRequest,
     FundSortBy,
+    FundType,
     ManagerProfile,
     MetricExplanation,
     NavPoint,
     RiskMatchResult,
+    RiskLevel,
     RiskProfile,
     SortOrder,
 )
+
+T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class FundDataContext:
+    snapshot_generation_id: str
+    source: str
+    data_updated_at: datetime | None
+
+
+@dataclass(frozen=True)
+class FundReadResult(Generic[T]):
+    data: T
+    context: FundDataContext
+
+
+@dataclass(frozen=True)
+class FundSearchResult:
+    data: list[Fund]
+    total: int
+    context: FundDataContext
+
+
+FUND_TYPES_BY_VALUE: dict[str, FundType] = {
+    "stock": "stock",
+    "mixed": "mixed",
+    "bond": "bond",
+    "money": "money",
+}
+
+RISK_LEVELS_BY_VALUE: dict[str, RiskLevel] = {
+    "R1": "R1",
+    "R2": "R2",
+    "R3": "R3",
+    "R4": "R4",
+    "R5": "R5",
+}
 
 
 def _as_iso(value: date | datetime) -> str:
     return value.isoformat()
 
 
+def _raw_string(payload: JsonObject, key: str) -> str | None:
+    value = payload.get(key)
+    return str(value) if value not in (None, "") else None
+
+
+def _stored_fund_type(value: str) -> FundType:
+    try:
+        return FUND_TYPES_BY_VALUE[value]
+    except KeyError as exc:
+        raise ValueError(f"unsupported stored fund_type: {value}") from exc
+
+
+def _stored_risk_level(value: str) -> RiskLevel:
+    try:
+        return RISK_LEVELS_BY_VALUE[value]
+    except KeyError as exc:
+        raise ValueError(f"unsupported stored risk_level: {value}") from exc
+
+
 def _to_fund(row: FundModel) -> Fund:
-    if row.metrics is None:
+    if row.metrics is None or row.metrics.snapshot_generation_id != row.snapshot_generation_id:
         raise ValueError(f"fund {row.code} has no metrics")
     return Fund(
         code=row.code,
         name=row.name,
-        fund_type=row.fund_type,  # type: ignore[arg-type]
-        risk_level=row.risk_level,  # type: ignore[arg-type]
+        fund_type=_stored_fund_type(row.fund_type),
+        risk_level=_stored_risk_level(row.risk_level),
         manager_name=row.manager_name,
         inception_date=_as_iso(row.inception_date),
         fund_size_billion=row.fund_size_billion,
@@ -45,7 +114,10 @@ def _to_fund(row: FundModel) -> Fund:
         category_rank_percentile=row.metrics.category_rank_percentile,
         manager_years=row.metrics.manager_years,
         source=row.source,
+        provider_profile=_raw_string(row.raw_data, "provider_profile"),
+        upstream_provider=_raw_string(row.raw_data, "upstream_provider"),
         data_updated_at=_as_iso(row.data_updated_at),
+        snapshot_generation_id=row.snapshot_generation_id,
     )
 
 
@@ -94,12 +166,13 @@ def _metric_explanations(row: FundModel) -> list[MetricExplanation]:
 def _to_detail(row: FundModel, risk_profile: RiskProfile = "C3") -> FundDetail:
     fund = _to_fund(row)
     total_fee = row.management_fee + row.custody_fee
-    matched = is_risk_matched(risk_profile, row.risk_level)
+    matched = is_risk_matched(risk_profile, fund.risk_level)
     return FundDetail(
         **fund.model_dump(),
         navs=[
             NavPoint(trade_date=nav.trade_date, nav=nav.nav, accumulated_nav=nav.accumulated_nav)
             for nav in sorted(row.navs, key=lambda item: item.trade_date)
+            if nav.snapshot_generation_id == row.snapshot_generation_id
         ],
         ai_summary=row.ai_summary,
         fee_summary=FeeSummary(
@@ -117,32 +190,90 @@ def _to_detail(row: FundModel, risk_profile: RiskProfile = "C3") -> FundDetail:
         metric_explanations=_metric_explanations(row),
         risk_match=RiskMatchResult(
             user_risk_profile=risk_profile,
-            fund_risk_level=row.risk_level,  # type: ignore[arg-type]
+            fund_risk_level=fund.risk_level,
             matched=matched,
-            message=_risk_match_message(risk_profile, row.risk_level, matched),
+            message=_risk_match_message(risk_profile, fund.risk_level, matched),
         ),
     )
 
 
-def latest_fund_data_updated_at(db: Session) -> datetime | None:
-    return db.scalar(select(func.max(FundModel.data_updated_at)))
+def latest_fund_data_updated_at(
+    db: Session,
+    snapshot_generation_id: str | None = None,
+) -> datetime | None:
+    generation_id = snapshot_generation_id or active_snapshot_generation_expression()
+    return db.scalar(
+        select(func.max(FundModel.data_updated_at)).where(
+            FundModel.snapshot_generation_id == generation_id
+        )
+    )
 
 
-def _sort_expression(sort_by: FundSortBy):
-    return {
-        "code": FundModel.code,
-        "annualized_return_3y": FundMetric.annualized_return_3y,
-        "annualized_return_5y": FundMetric.annualized_return_5y,
-        "max_drawdown": FundMetric.max_drawdown,
-        "sharpe_ratio": FundMetric.sharpe_ratio,
-        "fee": FundModel.management_fee + FundModel.custody_fee,
-        "size": FundModel.fund_size_billion,
-    }[sort_by]
+def fund_data_source_summary(
+    db: Session,
+    snapshot_generation_id: str | None = None,
+) -> str:
+    generation_id = snapshot_generation_id or active_snapshot_generation_expression()
+    raw_sources = db.scalars(
+        select(FundModel.source)
+        .where(FundModel.snapshot_generation_id == generation_id)
+        .distinct()
+        .order_by(FundModel.source)
+    ).all()
+    sources = [source.strip() for source in raw_sources if source and source.strip()]
+    if not sources:
+        return settings.fund_data_source
+    if len(sources) == 1:
+        return sources[0]
+    return f"mixed({','.join(sources)})"
 
 
-def _order_by(sort_by: FundSortBy, sort_order: SortOrder):
+def fund_data_context(
+    db: Session,
+    snapshot_generation_id: str | None = None,
+) -> FundDataContext:
+    generation_id = snapshot_generation_id or active_snapshot_generation_id(db)
+    return FundDataContext(
+        snapshot_generation_id=generation_id,
+        source=fund_data_source_summary(db, generation_id),
+        data_updated_at=latest_fund_data_updated_at(db, generation_id),
+    )
+
+
+def _sort_expression(
+    sort_by: FundSortBy,
+) -> SQLColumnExpression[str] | SQLColumnExpression[float]:
+    if sort_by == "code":
+        return FundModel.code
+    if sort_by == "annualized_return_3y":
+        return FundMetric.annualized_return_3y
+    if sort_by == "annualized_return_5y":
+        return FundMetric.annualized_return_5y
+    if sort_by == "max_drawdown":
+        return FundMetric.max_drawdown
+    if sort_by == "sharpe_ratio":
+        return FundMetric.sharpe_ratio
+    if sort_by == "fee":
+        return FundModel.management_fee + FundModel.custody_fee
+    return FundModel.fund_size_billion
+
+
+def _order_by(
+    sort_by: FundSortBy,
+    sort_order: SortOrder,
+) -> UnaryExpression[str] | UnaryExpression[float]:
     expression = _sort_expression(sort_by)
-    return asc(expression) if sort_order == "asc" else desc(expression)
+    return expression.asc() if sort_order == "asc" else expression.desc()
+
+
+def fund_inception_cutoff(as_of_date: date, min_years: int) -> date:
+    """Return the latest inception date that has completed ``min_years`` years."""
+    target_year = as_of_date.year - min_years
+    try:
+        return as_of_date.replace(year=target_year)
+    except ValueError:
+        # February 29 has no direct counterpart in a non-leap target year.
+        return as_of_date.replace(year=target_year, day=28)
 
 
 def search_funds(
@@ -150,13 +281,46 @@ def search_funds(
     query: str,
     page: int = 1,
     page_size: int = 20,
-    fund_types: list[str] | None = None,
-    risk_levels: list[str] | None = None,
+    fund_types: list[FundType] | None = None,
+    risk_levels: list[RiskLevel] | None = None,
     sort_by: FundSortBy = "code",
     sort_order: SortOrder = "asc",
 ) -> tuple[list[Fund], int]:
+    result = search_funds_with_context(
+        db,
+        query,
+        page=page,
+        page_size=page_size,
+        fund_types=fund_types,
+        risk_levels=risk_levels,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+    return result.data, result.total
+
+
+def search_funds_with_context(
+    db: Session,
+    query: str,
+    page: int = 1,
+    page_size: int = 20,
+    fund_types: list[FundType] | None = None,
+    risk_levels: list[RiskLevel] | None = None,
+    sort_by: FundSortBy = "code",
+    sort_order: SortOrder = "asc",
+) -> FundSearchResult:
+    context = fund_data_context(db)
+    generation_id = context.snapshot_generation_id
     needle = query.strip().lower()
-    stmt = select(FundModel).join(FundMetric).options(joinedload(FundModel.metrics))
+    stmt = (
+        select(FundModel)
+        .join(FundMetric)
+        .options(joinedload(FundModel.metrics))
+        .where(
+            FundModel.snapshot_generation_id == generation_id,
+            FundMetric.snapshot_generation_id == generation_id,
+        )
+    )
     if fund_types:
         stmt = stmt.where(FundModel.fund_type.in_(fund_types))
     if risk_levels:
@@ -168,70 +332,213 @@ def search_funds(
     total = len(rows)
     start = (page - 1) * page_size
     end = start + page_size
-    return [_to_fund(row) for row in rows[start:end] if row.metrics is not None], total
+    return FundSearchResult(
+        data=[_to_fund(row) for row in rows[start:end] if row.metrics is not None],
+        total=total,
+        context=context,
+    )
 
 
 def get_fund(db: Session, code: str, risk_profile: RiskProfile = "C3") -> FundDetail | None:
+    result = get_fund_with_context(db, code, risk_profile)
+    return result.data if result is not None else None
+
+
+def get_fund_with_context(
+    db: Session,
+    code: str,
+    risk_profile: RiskProfile = "C3",
+) -> FundReadResult[FundDetail] | None:
+    context = fund_data_context(db)
+    generation_id = context.snapshot_generation_id
     stmt = (
         select(FundModel)
-        .where(FundModel.code == code)
+        .where(
+            FundModel.code == code,
+            FundModel.snapshot_generation_id == generation_id,
+        )
         .options(joinedload(FundModel.metrics), joinedload(FundModel.navs))
     )
     row = db.scalars(stmt).unique().first()
-    return _to_detail(row, risk_profile) if row and row.metrics is not None else None
-
-
-def get_fund_navs(db: Session, code: str, start: str | None = None, end: str | None = None) -> list[NavPoint] | None:
-    if db.get(FundModel, code) is None:
+    if row is None or row.metrics is None:
         return None
-    stmt = select(FundNav).where(FundNav.fund_code == code)
+    return FundReadResult(data=_to_detail(row, risk_profile), context=context)
+
+
+def get_fund_navs(
+    db: Session, code: str, start: str | None = None, end: str | None = None
+) -> list[NavPoint] | None:
+    result = get_fund_navs_with_context(db, code, start, end)
+    return result.data if result is not None else None
+
+
+def get_fund_navs_with_context(
+    db: Session,
+    code: str,
+    start: str | None = None,
+    end: str | None = None,
+) -> FundReadResult[list[NavPoint]] | None:
+    context = fund_data_context(db)
+    generation_id = context.snapshot_generation_id
+    if db.scalar(
+        select(FundModel.code).where(
+            FundModel.code == code,
+            FundModel.snapshot_generation_id == generation_id,
+        )
+    ) is None:
+        return None
+    stmt = (
+        select(FundNav)
+        .join(FundModel, FundModel.code == FundNav.fund_code)
+        .where(
+            FundNav.fund_code == code,
+            FundNav.snapshot_generation_id == generation_id,
+            FundModel.snapshot_generation_id == generation_id,
+        )
+    )
     if start is not None:
         stmt = stmt.where(FundNav.trade_date >= start)
     if end is not None:
         stmt = stmt.where(FundNav.trade_date <= end)
     rows = db.scalars(stmt.order_by(FundNav.trade_date)).all()
-    return [
-        NavPoint(trade_date=row.trade_date, nav=row.nav, accumulated_nav=row.accumulated_nav)
-        for row in rows
-    ]
+    return FundReadResult(
+        data=[
+            NavPoint(trade_date=row.trade_date, nav=row.nav, accumulated_nav=row.accumulated_nav)
+            for row in rows
+        ],
+        context=context,
+    )
 
 
-def filter_funds(db: Session, payload: FundFilterRequest) -> list[Fund]:
+def filter_funds(
+    db: Session,
+    payload: FundFilterRequest,
+    *,
+    as_of_date: date | None = None,
+) -> list[Fund]:
+    return filter_funds_with_context(db, payload, as_of_date=as_of_date).data
+
+
+def filter_funds_with_context(
+    db: Session,
+    payload: FundFilterRequest,
+    *,
+    as_of_date: date | None = None,
+) -> FundReadResult[list[Fund]]:
+    context = fund_data_context(db)
+    generation_id = context.snapshot_generation_id
     low, high = payload.size_range
+    keyword = payload.keyword.strip().lower() if payload.keyword else ""
+    inception_cutoff = fund_inception_cutoff(as_of_date or date.today(), payload.min_years)
     stmt = (
         select(FundModel)
         .join(FundMetric)
         .options(joinedload(FundModel.metrics))
         .where(
+            FundModel.snapshot_generation_id == generation_id,
+            FundMetric.snapshot_generation_id == generation_id,
+            FundModel.risk_level.in_(RISK_PROFILE_LIMITS[payload.risk_profile]),
             FundModel.fund_type.in_(payload.fund_types),
             FundModel.fund_size_billion >= low,
             FundModel.fund_size_billion <= high,
-            FundMetric.manager_years >= payload.min_years,
+            FundModel.inception_date <= inception_cutoff,
             FundMetric.category_rank_percentile <= payload.return_rank_percentile,
             FundMetric.sharpe_ratio >= payload.sharpe_gte,
             FundModel.management_fee + FundModel.custody_fee <= payload.fee_lte,
         )
-        .order_by(_order_by(payload.sort_by, payload.sort_order), FundModel.code)
     )
+    if keyword:
+        stmt = stmt.where(
+            or_(
+                func.lower(FundModel.code).contains(keyword, autoescape=True),
+                func.lower(FundModel.name).contains(keyword, autoescape=True),
+            )
+        )
+    if payload.max_drawdown_lte_category_avg:
+        category_drawdown_average = (
+            select(
+                FundModel.fund_type.label("fund_type"),
+                func.avg(FundMetric.max_drawdown).label("average_max_drawdown"),
+            )
+            .join(FundMetric)
+            .where(
+                FundModel.snapshot_generation_id == generation_id,
+                FundMetric.snapshot_generation_id == generation_id,
+            )
+            .group_by(FundModel.fund_type)
+            .subquery()
+        )
+        stmt = stmt.join(
+            category_drawdown_average,
+            category_drawdown_average.c.fund_type == FundModel.fund_type,
+        ).where(
+            # Drawdowns are stored as negative percentages. A greater value means a
+            # smaller loss magnitude, for example -5% is better than -10%.
+            FundMetric.max_drawdown >= category_drawdown_average.c.average_max_drawdown
+        )
+    stmt = stmt.order_by(_order_by(payload.sort_by, payload.sort_order), FundModel.code)
     rows = db.scalars(stmt).unique().all()
-    return [_to_fund(row) for row in rows if row.metrics is not None and is_risk_matched(payload.risk_profile, row.risk_level)]
+    return FundReadResult(
+        data=[_to_fund(row) for row in rows if row.metrics is not None],
+        context=context,
+    )
 
 
 def compare_funds(db: Session, codes: list[str]) -> list[Fund]:
+    return compare_funds_with_context(db, codes).data
+
+
+def compare_funds_with_context(db: Session, codes: list[str]) -> FundReadResult[list[Fund]]:
+    context = fund_data_context(db)
+    generation_id = context.snapshot_generation_id
     selected_codes = codes[:5]
     stmt = (
         select(FundModel)
-        .where(FundModel.code.in_(selected_codes))
+        .join(FundMetric)
+        .where(
+            FundModel.code.in_(selected_codes),
+            FundModel.snapshot_generation_id == generation_id,
+            FundMetric.snapshot_generation_id == generation_id,
+        )
         .options(joinedload(FundModel.metrics))
         .order_by(FundModel.code)
     )
     rows_by_code = {row.code: row for row in db.scalars(stmt).unique().all()}
-    return [_to_fund(rows_by_code[code]) for code in selected_codes if code in rows_by_code and rows_by_code[code].metrics]
+    return FundReadResult(
+        data=[
+            _to_fund(rows_by_code[code])
+            for code in selected_codes
+            if code in rows_by_code and rows_by_code[code].metrics
+        ],
+        context=context,
+    )
 
 
-def upsert_fund_detail(db: Session, fund: FundDetail) -> None:
+def upsert_fund_profile(
+    db: Session,
+    fund: FundDetail,
+    snapshot_generation_id: str | None = None,
+) -> None:
+    generation_id = snapshot_generation_id or active_snapshot_generation_id(db)
     row = db.get(FundModel, fund.code)
-    payload = fund.model_dump()
+    payload = fund.model_dump(
+        include={
+            "code",
+            "name",
+            "fund_type",
+            "risk_level",
+            "manager_name",
+            "inception_date",
+            "fund_size_billion",
+            "management_fee",
+            "custody_fee",
+            "source",
+            "provider_profile",
+            "upstream_provider",
+            "data_updated_at",
+            "ai_summary",
+        }
+    )
     if row is None:
         row = FundModel(code=fund.code)
         db.add(row)
@@ -247,7 +554,36 @@ def upsert_fund_detail(db: Session, fund: FundDetail) -> None:
     row.data_updated_at = datetime.fromisoformat(fund.data_updated_at)
     row.ai_summary = fund.ai_summary
     row.raw_data = payload
+    row.snapshot_generation_id = generation_id
 
+
+def upsert_fund_metrics(
+    db: Session,
+    fund: FundDetail,
+    snapshot_generation_id: str | None = None,
+) -> None:
+    generation_id = snapshot_generation_id or active_snapshot_generation_id(db)
+    row = db.get(FundModel, fund.code)
+    if row is None or row.snapshot_generation_id != generation_id:
+        upsert_fund_profile(db, fund, generation_id)
+        db.flush()
+        row = db.get(FundModel, fund.code)
+    assert row is not None
+    payload = fund.model_dump(
+        include={
+            "code",
+            "annualized_return_3y",
+            "annualized_return_5y",
+            "max_drawdown",
+            "sharpe_ratio",
+            "category_rank_percentile",
+            "manager_years",
+            "metric_explanations",
+            "source",
+            "provider_profile",
+            "upstream_provider",
+        }
+    )
     metric = row.metrics or FundMetric(fund_code=fund.code)
     metric.annualized_return_3y = fund.annualized_return_3y
     metric.annualized_return_5y = fund.annualized_return_5y
@@ -256,14 +592,75 @@ def upsert_fund_detail(db: Session, fund: FundDetail) -> None:
     metric.category_rank_percentile = fund.category_rank_percentile
     metric.manager_years = fund.manager_years
     metric.raw_data = payload
+    metric.snapshot_generation_id = generation_id
     row.metrics = metric
 
+
+def _warning_json(payload: NavQualityWarningPayload) -> JsonObject:
+    return {
+        "code": payload["code"],
+        "fund_code": payload["fund_code"],
+        "trade_date": payload["trade_date"],
+        "field": payload["field"],
+        "value": payload["value"],
+        "minimum": payload["minimum"],
+        "maximum": payload["maximum"],
+        "message": payload["message"],
+    }
+
+
+def upsert_fund_navs(
+    db: Session,
+    fund: FundDetail,
+    snapshot_generation_id: str | None = None,
+) -> list[NavQualityWarningPayload]:
+    generation_id = snapshot_generation_id or active_snapshot_generation_id(db)
+    quality_warnings = validate_fund_navs(fund)
+    warning_payloads = [warning.as_dict() for warning in quality_warnings]
+    warnings_by_date: dict[str, list[NavQualityWarningPayload]] = {}
+    for warning in warning_payloads:
+        warnings_by_date.setdefault(warning["trade_date"], []).append(warning)
+
+    row = db.get(FundModel, fund.code)
+    if row is None or row.snapshot_generation_id != generation_id:
+        upsert_fund_profile(db, fund, generation_id)
+        db.flush()
+        row = db.get(FundModel, fund.code)
+    assert row is not None
     existing_navs = {nav.trade_date: nav for nav in row.navs}
     for nav in fund.navs:
+        precision = nav_trade_date_precision(nav.trade_date)
+        if precision is None:
+            raise ValueError(f"fund {fund.code} has invalid NAV trade_date {nav.trade_date!r}")
         nav_row = existing_navs.get(nav.trade_date)
         if nav_row is None:
             nav_row = FundNav(fund_code=fund.code, trade_date=nav.trade_date)
             row.navs.append(nav_row)
+        nav_row.trade_date_precision = precision
         nav_row.nav = nav.nav
         nav_row.accumulated_nav = nav.accumulated_nav
-        nav_row.raw_data = nav.model_dump()
+        stored_warnings: list[JsonValue] = [
+            _warning_json(warning) for warning in warnings_by_date.get(nav.trade_date, [])
+        ]
+        nav_row.raw_data = {
+            **nav.model_dump(),
+            "source": fund.source,
+            "provider_profile": fund.provider_profile,
+            "upstream_provider": fund.upstream_provider,
+            "trade_date_precision": precision,
+            "quality_warnings": stored_warnings,
+        }
+        nav_row.snapshot_generation_id = generation_id
+    return warning_payloads
+
+
+def upsert_fund_detail(
+    db: Session,
+    fund: FundDetail,
+    snapshot_generation_id: str | None = None,
+) -> None:
+    generation_id = snapshot_generation_id or active_snapshot_generation_id(db)
+    upsert_fund_profile(db, fund, generation_id)
+    db.flush()
+    upsert_fund_metrics(db, fund, generation_id)
+    upsert_fund_navs(db, fund, generation_id)

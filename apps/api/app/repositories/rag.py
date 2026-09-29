@@ -2,9 +2,10 @@ from dataclasses import dataclass
 import hashlib
 import math
 import re
+from typing import Any
 from uuid import uuid5, NAMESPACE_URL
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.models import Document, DocumentChunk
@@ -66,7 +67,7 @@ def ingest_document(
     source_uri: str,
     content: str,
     document_type: str = "education",
-    metadata: dict | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> Document:
     normalized_content = content.strip()
     if not normalized_content:
@@ -100,6 +101,59 @@ def ingest_document(
 
 def retrieve_document_chunks(db: Session, query: str, limit: int = 3) -> list[RetrievedChunk]:
     query_embedding = embed_text(query)
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        return _retrieve_document_chunks_postgresql(db, query, query_embedding, limit)
+    return _retrieve_document_chunks_in_process(db, query, query_embedding, limit)
+
+
+def _retrieve_document_chunks_postgresql(
+    db: Session,
+    query: str,
+    query_embedding: list[float],
+    limit: int,
+) -> list[RetrievedChunk]:
+    candidate_limit = max(limit * 5, limit)
+    rows = db.execute(
+        text(
+            """
+            SELECT
+              dc.id AS chunk_id,
+              dc.document_id AS document_id,
+              dc.chunk_index AS chunk_index,
+              dc.content AS content,
+              d.title AS document_title,
+              d.source_uri AS source_uri,
+              1 - (dc.embedding <=> CAST(:embedding AS vector)) AS vector_score
+            FROM document_chunks dc
+            JOIN documents d ON d.id = dc.document_id
+            ORDER BY dc.embedding <=> CAST(:embedding AS vector), dc.id
+            LIMIT :candidate_limit
+            """
+        ),
+        {"embedding": _format_pgvector(query_embedding), "candidate_limit": candidate_limit},
+    ).mappings()
+    scored = [
+        RetrievedChunk(
+            document_id=str(row["document_id"]),
+            document_title=str(row["document_title"]),
+            source_uri=str(row["source_uri"]),
+            chunk_id=int(row["chunk_id"]),
+            chunk_index=int(row["chunk_index"]),
+            content=str(row["content"]),
+            score=round(float(row["vector_score"]) + _lexical_overlap(query, str(row["content"])) * 0.05, 6),
+        )
+        for row in rows
+    ]
+    scored.sort(key=lambda item: item.score, reverse=True)
+    return scored[:limit]
+
+
+def _retrieve_document_chunks_in_process(
+    db: Session,
+    query: str,
+    query_embedding: list[float],
+    limit: int,
+) -> list[RetrievedChunk]:
     rows = db.scalars(
         select(DocumentChunk).options(selectinload(DocumentChunk.document)).order_by(DocumentChunk.id)
     ).all()
@@ -121,6 +175,10 @@ def retrieve_document_chunks(db: Session, query: str, limit: int = 3) -> list[Re
         )
     scored.sort(key=lambda item: item.score, reverse=True)
     return scored[:limit]
+
+
+def _format_pgvector(values: list[float]) -> str:
+    return "[" + ",".join(str(float(value)) for value in values) + "]"
 
 
 def _cosine_similarity(left: list[float], right: list[float]) -> float:

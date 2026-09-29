@@ -17,6 +17,10 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+def json_type() -> sa.types.TypeEngine:
+    return postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), "sqlite")
+
+
 def upgrade() -> None:
     op.create_table(
         "ai_threads",
@@ -34,7 +38,7 @@ def upgrade() -> None:
         sa.Column("thread_id", sa.String(length=64), nullable=False),
         sa.Column("role", sa.String(length=32), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
-        sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("payload", json_type(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["thread_id"], ["ai_threads.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),

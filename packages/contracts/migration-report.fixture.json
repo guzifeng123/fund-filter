@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "started_at": "2026-07-12T00:00:00.0000000Z",
+  "finished_at": "2026-07-12T00:00:01.0000000Z",
+  "duration_ms": 1000,
+  "working_directory": "C:\\Users\\39187\\Desktop\\基金\\apps\\api",
+  "command": "upgrade",
+  "revision": "head",
+  "sql": true,
+  "dry_run": true,
+  "database_url_override": true,
+  "python_arguments": [
+    "-m",
+    "alembic",
+    "-c",
+    "alembic.ini",
+    "upgrade",
+    "head",
+    "--sql"
+  ],
+  "exit_code": 0,
+  "error": null
+}

@@ -17,7 +17,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_DashboardData_"
+                }
               }
             }
           }
@@ -36,7 +38,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_DataStatus_"
+                }
               }
             }
           }
@@ -69,7 +73,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_JobRunSummary__"
+                }
               }
             }
           },
@@ -79,6 +85,27 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/data/scheduler/status": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Scheduler Status",
+        "operationId": "scheduler_status_api_data_scheduler_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_SchedulerStatus_"
                 }
               }
             }
@@ -117,9 +144,31 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_DataSyncResult_"
+                }
               }
             }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "description": "Validation Error",
@@ -265,7 +314,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_Fund__"
+                }
               }
             }
           },
@@ -304,7 +355,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_Fund__"
+                }
               }
             }
           },
@@ -343,7 +396,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_Fund__"
+                }
               }
             }
           },
@@ -400,9 +455,21 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FundDetail_"
+                }
               }
             }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "description": "Validation Error",
@@ -472,9 +539,31 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_NavPoint__"
+                }
               }
             }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "description": "Validation Error",
@@ -501,7 +590,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_RiskQuestion__"
+                }
               }
             }
           }
@@ -520,7 +611,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Union_RiskAssessmentResult__NoneType__"
+                }
               }
             }
           }
@@ -549,7 +642,19 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RiskAssessmentResult_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
               }
             }
           },
@@ -578,7 +683,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_PortfolioTemplate__"
+                }
               }
             }
           }
@@ -597,7 +704,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_PortfolioSummary__"
+                }
               }
             }
           }
@@ -624,7 +733,19 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PortfolioDetail_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
               }
             }
           },
@@ -664,9 +785,21 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PortfolioDetail_"
+                }
               }
             }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "description": "Validation Error",
@@ -712,9 +845,21 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PortfolioDetail_"
+                }
               }
             }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "description": "Validation Error",
@@ -750,9 +895,21 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PortfolioDeleteResult_"
+                }
               }
             }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "description": "Validation Error",
@@ -800,9 +957,21 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PortfolioDetail_"
+                }
               }
             }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "description": "Validation Error",
@@ -849,9 +1018,93 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PortfolioDetail_"
+                }
               }
             }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/portfolios/{portfolio_id}/positions/normalize": {
+      "post": {
+        "tags": [
+          "portfolios"
+        ],
+        "summary": "Normalize Position Weights",
+        "operationId": "normalize_position_weights_api_portfolios__portfolio_id__positions_normalize_post",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PortfolioDetail_"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "description": "Validation Error",
@@ -889,9 +1142,31 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RebalancePreview_"
+                }
               }
             }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "description": "Validation Error",
@@ -928,7 +1203,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_BacktestResult_"
+                }
               }
             }
           },
@@ -968,9 +1245,21 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_BacktestResult_"
+                }
               }
             }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "description": "Validation Error",
@@ -1007,7 +1296,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ChatResponse_"
+                }
               }
             }
           },
@@ -1043,10 +1334,12 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Server-sent chat chunks followed by the final structured response.",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -1075,7 +1368,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_AiThreadSummary__"
+                }
               }
             }
           }
@@ -1105,9 +1400,21 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AiThreadDetail_"
+                }
               }
             }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "description": "Validation Error",
@@ -1115,6 +1422,27 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/runtime": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Runtime Settings",
+        "operationId": "runtime_settings_api_settings_runtime_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RuntimeSettingsData_"
                 }
               }
             }
@@ -1147,6 +1475,585 @@
   },
   "components": {
     "schemas": {
+      "AiMessageSchema": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "content",
+          "created_at",
+          "payload"
+        ],
+        "title": "AiMessageSchema"
+      },
+      "AiThreadDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/AiMessageSchema"
+            },
+            "type": "array",
+            "title": "Messages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "created_at",
+          "updated_at",
+          "messages"
+        ],
+        "title": "AiThreadDetail"
+      },
+      "AiThreadSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AiThreadSummary"
+      },
+      "ApiError": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ApiError"
+      },
+      "ApiErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error",
+          "meta"
+        ],
+        "title": "ApiErrorResponse"
+      },
+      "ApiMeta": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "data_updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Updated At"
+          },
+          "disclaimer": {
+            "type": "string",
+            "title": "Disclaimer"
+          },
+          "pagination": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pagination"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "data_updated_at",
+          "disclaimer"
+        ],
+        "title": "ApiMeta"
+      },
+      "ApiResponse_AiThreadDetail_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AiThreadDetail"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[AiThreadDetail]"
+      },
+      "ApiResponse_BacktestResult_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/BacktestResult"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[BacktestResult]"
+      },
+      "ApiResponse_ChatResponse_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ChatResponse"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[ChatResponse]"
+      },
+      "ApiResponse_DashboardData_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DashboardData"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[DashboardData]"
+      },
+      "ApiResponse_DataStatus_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DataStatus"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[DataStatus]"
+      },
+      "ApiResponse_DataSyncResult_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DataSyncResult"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[DataSyncResult]"
+      },
+      "ApiResponse_FundDetail_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/FundDetail"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[FundDetail]"
+      },
+      "ApiResponse_PortfolioDeleteResult_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PortfolioDeleteResult"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[PortfolioDeleteResult]"
+      },
+      "ApiResponse_PortfolioDetail_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PortfolioDetail"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[PortfolioDetail]"
+      },
+      "ApiResponse_RebalancePreview_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RebalancePreview"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[RebalancePreview]"
+      },
+      "ApiResponse_RiskAssessmentResult_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RiskAssessmentResult"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[RiskAssessmentResult]"
+      },
+      "ApiResponse_RuntimeSettingsData_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RuntimeSettingsData"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[RuntimeSettingsData]"
+      },
+      "ApiResponse_SchedulerStatus_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SchedulerStatus"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[SchedulerStatus]"
+      },
+      "ApiResponse_Union_RiskAssessmentResult__NoneType__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskAssessmentResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[Union[RiskAssessmentResult, NoneType]]"
+      },
+      "ApiResponse_list_AiThreadSummary__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AiThreadSummary"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[list[AiThreadSummary]]"
+      },
+      "ApiResponse_list_Fund__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Fund"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[list[Fund]]"
+      },
+      "ApiResponse_list_JobRunSummary__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/JobRunSummary"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[list[JobRunSummary]]"
+      },
+      "ApiResponse_list_NavPoint__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/NavPoint"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[list[NavPoint]]"
+      },
+      "ApiResponse_list_PortfolioSummary__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/PortfolioSummary"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[list[PortfolioSummary]]"
+      },
+      "ApiResponse_list_PortfolioTemplate__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/PortfolioTemplate"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[list[PortfolioTemplate]]"
+      },
+      "ApiResponse_list_RiskQuestion__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/RiskQuestion"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[list[RiskQuestion]]"
+      },
+      "BacktestPoint": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "title": "Date"
+          },
+          "portfolio": {
+            "type": "number",
+            "title": "Portfolio"
+          },
+          "benchmark": {
+            "type": "number",
+            "title": "Benchmark"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "portfolio",
+          "benchmark"
+        ],
+        "title": "BacktestPoint"
+      },
       "BacktestRequest": {
         "properties": {
           "strategy_type": {
@@ -1161,6 +2068,7 @@
           },
           "amount": {
             "type": "number",
+            "exclusiveMinimum": 0.0,
             "title": "Amount"
           },
           "start": {
@@ -1207,6 +2115,109 @@
         ],
         "title": "BacktestRequest"
       },
+      "BacktestResult": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "strategy_type": {
+            "type": "string",
+            "enum": [
+              "monthly_dca",
+              "weekly_dca",
+              "rebalance",
+              "template_portfolio"
+            ],
+            "title": "Strategy Type"
+          },
+          "annualized_return": {
+            "type": "number",
+            "title": "Annualized Return"
+          },
+          "max_drawdown": {
+            "type": "number",
+            "title": "Max Drawdown"
+          },
+          "volatility": {
+            "type": "number",
+            "title": "Volatility"
+          },
+          "sharpe_ratio": {
+            "type": "number",
+            "title": "Sharpe Ratio"
+          },
+          "total_invested": {
+            "type": "number",
+            "title": "Total Invested"
+          },
+          "final_value": {
+            "type": "number",
+            "title": "Final Value"
+          },
+          "money_weighted_return": {
+            "type": "number",
+            "title": "Money Weighted Return",
+            "default": 0
+          },
+          "time_weighted_return": {
+            "type": "number",
+            "title": "Time Weighted Return",
+            "default": 0
+          },
+          "return_calculation_method": {
+            "type": "string",
+            "enum": [
+              "xirr",
+              "unavailable"
+            ],
+            "title": "Return Calculation Method",
+            "default": "xirr"
+          },
+          "snapshot_generation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Generation Id"
+          },
+          "data_warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Warning"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/BacktestPoint"
+            },
+            "type": "array",
+            "title": "Points"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "strategy_type",
+          "annualized_return",
+          "max_drawdown",
+          "volatility",
+          "sharpe_ratio",
+          "total_invested",
+          "final_value",
+          "points"
+        ],
+        "title": "BacktestResult"
+      },
       "ChatRequest": {
         "properties": {
           "thread_id": {
@@ -1227,8 +2238,7 @@
           "context": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Context",
-            "default": {}
+            "title": "Context"
           }
         },
         "type": "object",
@@ -1236,6 +2246,424 @@
           "message"
         ],
         "title": "ChatRequest"
+      },
+      "ChatResponse": {
+        "properties": {
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "conclusion": {
+            "type": "string",
+            "title": "Conclusion"
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence"
+          },
+          "references": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "References"
+          },
+          "risk": {
+            "type": "string",
+            "title": "Risk"
+          },
+          "data_date": {
+            "type": "string",
+            "title": "Data Date"
+          },
+          "disclaimer": {
+            "type": "string",
+            "title": "Disclaimer"
+          },
+          "unable_to_answer": {
+            "type": "boolean",
+            "title": "Unable To Answer",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "conclusion",
+          "evidence",
+          "risk",
+          "data_date",
+          "disclaimer"
+        ],
+        "title": "ChatResponse"
+      },
+      "DashboardData": {
+        "properties": {
+          "risk_profile": {
+            "type": "string",
+            "title": "Risk Profile"
+          },
+          "risk_status": {
+            "type": "string",
+            "enum": [
+              "not_assessed",
+              "valid",
+              "expires_soon",
+              "expired"
+            ],
+            "title": "Risk Status"
+          },
+          "risk_notice": {
+            "type": "string",
+            "title": "Risk Notice"
+          },
+          "health": {
+            "type": "string",
+            "title": "Health"
+          },
+          "portfolio_health_status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable",
+              "not_configured"
+            ],
+            "title": "Portfolio Health Status"
+          },
+          "watchlist_updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watchlist Updated At"
+          },
+          "watchlist_status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable",
+              "not_configured"
+            ],
+            "title": "Watchlist Status"
+          },
+          "alerts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Alerts"
+          },
+          "alerts_status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable",
+              "not_configured"
+            ],
+            "title": "Alerts Status"
+          },
+          "data_status": {
+            "$ref": "#/components/schemas/DataStatus"
+          },
+          "recent_job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobRunSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "risk_profile",
+          "risk_status",
+          "risk_notice",
+          "health",
+          "portfolio_health_status",
+          "watchlist_updated_at",
+          "watchlist_status",
+          "alerts",
+          "alerts_status",
+          "data_status",
+          "recent_job"
+        ],
+        "title": "DashboardData"
+      },
+      "DataStatus": {
+        "properties": {
+          "db_connected": {
+            "type": "boolean",
+            "title": "Db Connected"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "fund_count": {
+            "type": "integer",
+            "title": "Fund Count"
+          },
+          "nav_count": {
+            "type": "integer",
+            "title": "Nav Count"
+          },
+          "latest_data_updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Data Updated At"
+          },
+          "freshness_status": {
+            "type": "string",
+            "enum": [
+              "empty",
+              "fresh",
+              "stale",
+              "failed"
+            ],
+            "title": "Freshness Status"
+          },
+          "stale_after_days": {
+            "type": "integer",
+            "title": "Stale After Days"
+          },
+          "last_job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LastJob"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "db_connected",
+          "source",
+          "fund_count",
+          "nav_count",
+          "latest_data_updated_at",
+          "freshness_status",
+          "stale_after_days",
+          "last_job"
+        ],
+        "title": "DataStatus"
+      },
+      "DataSyncResult": {
+        "properties": {
+          "task": {
+            "type": "string",
+            "enum": [
+              "all",
+              "profiles",
+              "navs",
+              "metrics",
+              "risk_levels"
+            ],
+            "title": "Task"
+          },
+          "result": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Result"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task",
+          "result"
+        ],
+        "title": "DataSyncResult"
+      },
+      "FeeSummary": {
+        "properties": {
+          "management_fee": {
+            "type": "number",
+            "title": "Management Fee"
+          },
+          "custody_fee": {
+            "type": "number",
+            "title": "Custody Fee"
+          },
+          "total_fee": {
+            "type": "number",
+            "title": "Total Fee"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "management_fee",
+          "custody_fee",
+          "total_fee",
+          "explanation"
+        ],
+        "title": "FeeSummary"
+      },
+      "Fund": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "fund_type": {
+            "type": "string",
+            "enum": [
+              "stock",
+              "mixed",
+              "bond",
+              "money"
+            ],
+            "title": "Fund Type"
+          },
+          "risk_level": {
+            "type": "string",
+            "enum": [
+              "R1",
+              "R2",
+              "R3",
+              "R4",
+              "R5"
+            ],
+            "title": "Risk Level"
+          },
+          "manager_name": {
+            "type": "string",
+            "title": "Manager Name"
+          },
+          "inception_date": {
+            "type": "string",
+            "title": "Inception Date"
+          },
+          "fund_size_billion": {
+            "type": "number",
+            "title": "Fund Size Billion"
+          },
+          "management_fee": {
+            "type": "number",
+            "title": "Management Fee"
+          },
+          "custody_fee": {
+            "type": "number",
+            "title": "Custody Fee"
+          },
+          "annualized_return_3y": {
+            "type": "number",
+            "title": "Annualized Return 3Y"
+          },
+          "annualized_return_5y": {
+            "type": "number",
+            "title": "Annualized Return 5Y"
+          },
+          "max_drawdown": {
+            "type": "number",
+            "title": "Max Drawdown"
+          },
+          "sharpe_ratio": {
+            "type": "number",
+            "title": "Sharpe Ratio"
+          },
+          "category_rank_percentile": {
+            "type": "number",
+            "title": "Category Rank Percentile"
+          },
+          "manager_years": {
+            "type": "integer",
+            "title": "Manager Years"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "provider_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Profile"
+          },
+          "upstream_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upstream Provider"
+          },
+          "data_updated_at": {
+            "type": "string",
+            "title": "Data Updated At"
+          },
+          "snapshot_generation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Generation Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "fund_type",
+          "risk_level",
+          "manager_name",
+          "inception_date",
+          "fund_size_billion",
+          "management_fee",
+          "custody_fee",
+          "annualized_return_3y",
+          "annualized_return_5y",
+          "max_drawdown",
+          "sharpe_ratio",
+          "category_rank_percentile",
+          "manager_years",
+          "source",
+          "data_updated_at"
+        ],
+        "title": "Fund"
       },
       "FundCompareRequest": {
         "properties": {
@@ -1245,7 +2673,7 @@
             },
             "type": "array",
             "maxItems": 5,
-            "minItems": 1,
+            "minItems": 2,
             "title": "Codes"
           }
         },
@@ -1255,8 +2683,210 @@
         ],
         "title": "FundCompareRequest"
       },
+      "FundDetail": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "fund_type": {
+            "type": "string",
+            "enum": [
+              "stock",
+              "mixed",
+              "bond",
+              "money"
+            ],
+            "title": "Fund Type"
+          },
+          "risk_level": {
+            "type": "string",
+            "enum": [
+              "R1",
+              "R2",
+              "R3",
+              "R4",
+              "R5"
+            ],
+            "title": "Risk Level"
+          },
+          "manager_name": {
+            "type": "string",
+            "title": "Manager Name"
+          },
+          "inception_date": {
+            "type": "string",
+            "title": "Inception Date"
+          },
+          "fund_size_billion": {
+            "type": "number",
+            "title": "Fund Size Billion"
+          },
+          "management_fee": {
+            "type": "number",
+            "title": "Management Fee"
+          },
+          "custody_fee": {
+            "type": "number",
+            "title": "Custody Fee"
+          },
+          "annualized_return_3y": {
+            "type": "number",
+            "title": "Annualized Return 3Y"
+          },
+          "annualized_return_5y": {
+            "type": "number",
+            "title": "Annualized Return 5Y"
+          },
+          "max_drawdown": {
+            "type": "number",
+            "title": "Max Drawdown"
+          },
+          "sharpe_ratio": {
+            "type": "number",
+            "title": "Sharpe Ratio"
+          },
+          "category_rank_percentile": {
+            "type": "number",
+            "title": "Category Rank Percentile"
+          },
+          "manager_years": {
+            "type": "integer",
+            "title": "Manager Years"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "provider_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Profile"
+          },
+          "upstream_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upstream Provider"
+          },
+          "data_updated_at": {
+            "type": "string",
+            "title": "Data Updated At"
+          },
+          "snapshot_generation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Generation Id"
+          },
+          "navs": {
+            "items": {
+              "$ref": "#/components/schemas/NavPoint"
+            },
+            "type": "array",
+            "title": "Navs"
+          },
+          "ai_summary": {
+            "type": "string",
+            "title": "Ai Summary"
+          },
+          "fee_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeeSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "manager_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metric_explanations": {
+            "items": {
+              "$ref": "#/components/schemas/MetricExplanation"
+            },
+            "type": "array",
+            "title": "Metric Explanations"
+          },
+          "risk_match": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskMatchResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "fund_type",
+          "risk_level",
+          "manager_name",
+          "inception_date",
+          "fund_size_billion",
+          "management_fee",
+          "custody_fee",
+          "annualized_return_3y",
+          "annualized_return_5y",
+          "max_drawdown",
+          "sharpe_ratio",
+          "category_rank_percentile",
+          "manager_years",
+          "source",
+          "data_updated_at",
+          "navs",
+          "ai_summary"
+        ],
+        "title": "FundDetail"
+      },
       "FundFilterRequest": {
         "properties": {
+          "keyword": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keyword",
+            "description": "Optional fund code/name keyword applied together with every filter criterion."
+          },
           "risk_profile": {
             "type": "string",
             "enum": [
@@ -1284,7 +2914,8 @@
           "min_years": {
             "type": "integer",
             "minimum": 0.0,
-            "title": "Min Years"
+            "title": "Min Years",
+            "description": "Minimum completed years since the fund inception_date."
           },
           "size_range": {
             "prefixItems": [
@@ -1308,7 +2939,8 @@
           },
           "max_drawdown_lte_category_avg": {
             "type": "boolean",
-            "title": "Max Drawdown Lte Category Avg"
+            "title": "Max Drawdown Lte Category Avg",
+            "description": "When true, keep funds whose signed max_drawdown is greater than or equal to the average for the same fund_type (a smaller loss magnitude)."
           },
           "sharpe_gte": {
             "type": "number",
@@ -1368,6 +3000,198 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "JobRunSummary": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "success",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "error_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Detail"
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "status",
+          "started_at",
+          "finished_at",
+          "error_detail",
+          "details"
+        ],
+        "title": "JobRunSummary"
+      },
+      "LastJob": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "success",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "error_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "status",
+          "finished_at"
+        ],
+        "title": "LastJob"
+      },
+      "ManagerProfile": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "years": {
+            "type": "integer",
+            "title": "Years"
+          },
+          "inception_date": {
+            "type": "string",
+            "title": "Inception Date"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "years",
+          "inception_date",
+          "explanation"
+        ],
+        "title": "ManagerProfile"
+      },
+      "MetricExplanation": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "value",
+          "explanation"
+        ],
+        "title": "MetricExplanation"
+      },
+      "NavPoint": {
+        "properties": {
+          "trade_date": {
+            "type": "string",
+            "pattern": "^(?:[0-9]{4}|[0-9]{4}-[0-9]{2}-[0-9]{2})$",
+            "title": "Trade Date",
+            "description": "Canonical YYYY-MM-DD for real NAVs; YYYY is reserved for legacy sample points."
+          },
+          "nav": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Nav"
+          },
+          "accumulated_nav": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Accumulated Nav"
+          }
+        },
+        "type": "object",
+        "required": [
+          "trade_date",
+          "nav",
+          "accumulated_nav"
+        ],
+        "title": "NavPoint"
+      },
       "PortfolioCreateRequest": {
         "properties": {
           "name": {
@@ -1393,6 +3217,151 @@
         ],
         "title": "PortfolioCreateRequest"
       },
+      "PortfolioDeleteResult": {
+        "properties": {
+          "deleted": {
+            "type": "boolean",
+            "title": "Deleted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deleted"
+        ],
+        "title": "PortfolioDeleteResult"
+      },
+      "PortfolioDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "template_key": {
+            "type": "string",
+            "title": "Template Key"
+          },
+          "stock_ratio": {
+            "type": "integer",
+            "title": "Stock Ratio"
+          },
+          "bond_ratio": {
+            "type": "integer",
+            "title": "Bond Ratio"
+          },
+          "position_count": {
+            "type": "integer",
+            "title": "Position Count",
+            "default": 0
+          },
+          "unavailable_position_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Unavailable Position Count"
+          },
+          "positions": {
+            "items": {
+              "$ref": "#/components/schemas/PortfolioPosition"
+            },
+            "type": "array",
+            "title": "Positions"
+          },
+          "total_weight_percent": {
+            "type": "number",
+            "title": "Total Weight Percent",
+            "default": 0
+          },
+          "weight_warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Warning"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "template_key",
+          "stock_ratio",
+          "bond_ratio",
+          "unavailable_position_count",
+          "positions"
+        ],
+        "title": "PortfolioDetail"
+      },
+      "PortfolioPosition": {
+        "properties": {
+          "fund_code": {
+            "type": "string",
+            "title": "Fund Code"
+          },
+          "fund_name": {
+            "type": "string",
+            "title": "Fund Name"
+          },
+          "fund_type": {
+            "type": "string",
+            "enum": [
+              "stock",
+              "mixed",
+              "bond",
+              "money"
+            ],
+            "title": "Fund Type"
+          },
+          "risk_level": {
+            "type": "string",
+            "title": "Risk Level"
+          },
+          "weight_percent": {
+            "type": "number",
+            "title": "Weight Percent"
+          },
+          "normalized_weight_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Normalized Weight Percent"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "availability_reason": {
+            "type": "string",
+            "enum": [
+              "available",
+              "removed_from_active_snapshot"
+            ],
+            "title": "Availability Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fund_code",
+          "fund_name",
+          "fund_type",
+          "risk_level",
+          "weight_percent",
+          "available",
+          "availability_reason"
+        ],
+        "title": "PortfolioPosition"
+      },
       "PortfolioPositionRequest": {
         "properties": {
           "fund_code": {
@@ -1413,6 +3382,98 @@
         ],
         "title": "PortfolioPositionRequest"
       },
+      "PortfolioSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "template_key": {
+            "type": "string",
+            "title": "Template Key"
+          },
+          "stock_ratio": {
+            "type": "integer",
+            "title": "Stock Ratio"
+          },
+          "bond_ratio": {
+            "type": "integer",
+            "title": "Bond Ratio"
+          },
+          "position_count": {
+            "type": "integer",
+            "title": "Position Count",
+            "default": 0
+          },
+          "unavailable_position_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Unavailable Position Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "template_key",
+          "stock_ratio",
+          "bond_ratio",
+          "unavailable_position_count"
+        ],
+        "title": "PortfolioSummary"
+      },
+      "PortfolioTemplate": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "conservative",
+              "balanced",
+              "growth"
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "stock_ratio": {
+            "type": "integer",
+            "title": "Stock Ratio"
+          },
+          "bond_ratio": {
+            "type": "integer",
+            "title": "Bond Ratio"
+          },
+          "suitable_profiles": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "C1",
+                "C2",
+                "C3",
+                "C4",
+                "C5"
+              ]
+            },
+            "type": "array",
+            "title": "Suitable Profiles"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "stock_ratio",
+          "bond_ratio",
+          "suitable_profiles"
+        ],
+        "title": "PortfolioTemplate"
+      },
       "PortfolioUpdateRequest": {
         "properties": {
           "name": {
@@ -1427,6 +3488,60 @@
           "name"
         ],
         "title": "PortfolioUpdateRequest"
+      },
+      "RebalancePreview": {
+        "properties": {
+          "portfolio_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portfolio Id"
+          },
+          "drift_percent": {
+            "type": "number",
+            "title": "Drift Percent"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "current_stock_ratio": {
+            "type": "number",
+            "title": "Current Stock Ratio",
+            "default": 0
+          },
+          "current_bond_ratio": {
+            "type": "number",
+            "title": "Current Bond Ratio",
+            "default": 0
+          },
+          "target_stock_ratio": {
+            "type": "number",
+            "title": "Target Stock Ratio",
+            "default": 0
+          },
+          "target_bond_ratio": {
+            "type": "number",
+            "title": "Target Bond Ratio",
+            "default": 0
+          },
+          "triggered": {
+            "type": "boolean",
+            "title": "Triggered",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "drift_percent",
+          "message"
+        ],
+        "title": "RebalancePreview"
       },
       "RiskAnswer": {
         "properties": {
@@ -1448,6 +3563,56 @@
         ],
         "title": "RiskAnswer"
       },
+      "RiskAssessmentResult": {
+        "properties": {
+          "risk_profile": {
+            "type": "string",
+            "enum": [
+              "C1",
+              "C2",
+              "C3",
+              "C4",
+              "C5"
+            ],
+            "title": "Risk Profile"
+          },
+          "score": {
+            "type": "integer",
+            "title": "Score"
+          },
+          "effective_from": {
+            "type": "string",
+            "title": "Effective From"
+          },
+          "effective_to": {
+            "type": "string",
+            "title": "Effective To"
+          },
+          "expires_soon": {
+            "type": "boolean",
+            "title": "Expires Soon"
+          },
+          "is_expired": {
+            "type": "boolean",
+            "title": "Is Expired"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "risk_profile",
+          "score",
+          "effective_from",
+          "effective_to",
+          "expires_soon",
+          "is_expired",
+          "explanation"
+        ],
+        "title": "RiskAssessmentResult"
+      },
       "RiskAssessmentSubmission": {
         "properties": {
           "answers": {
@@ -1465,6 +3630,511 @@
           "answers"
         ],
         "title": "RiskAssessmentSubmission"
+      },
+      "RiskMatchResult": {
+        "properties": {
+          "user_risk_profile": {
+            "type": "string",
+            "enum": [
+              "C1",
+              "C2",
+              "C3",
+              "C4",
+              "C5"
+            ],
+            "title": "User Risk Profile"
+          },
+          "fund_risk_level": {
+            "type": "string",
+            "enum": [
+              "R1",
+              "R2",
+              "R3",
+              "R4",
+              "R5"
+            ],
+            "title": "Fund Risk Level"
+          },
+          "matched": {
+            "type": "boolean",
+            "title": "Matched"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_risk_profile",
+          "fund_risk_level",
+          "matched",
+          "message"
+        ],
+        "title": "RiskMatchResult"
+      },
+      "RiskQuestion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/RiskQuestionOption"
+            },
+            "type": "array",
+            "title": "Options"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "options"
+        ],
+        "title": "RiskQuestion"
+      },
+      "RiskQuestionOption": {
+        "properties": {
+          "score": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Score"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "score",
+          "label"
+        ],
+        "title": "RiskQuestionOption"
+      },
+      "RuntimeCleanupSettings": {
+        "properties": {
+          "method": {
+            "type": "string",
+            "const": "manual_script",
+            "title": "Method"
+          },
+          "dry_run_supported": {
+            "type": "boolean",
+            "title": "Dry Run Supported"
+          },
+          "automatic_cleanup_supported": {
+            "type": "boolean",
+            "title": "Automatic Cleanup Supported"
+          }
+        },
+        "type": "object",
+        "required": [
+          "method",
+          "dry_run_supported",
+          "automatic_cleanup_supported"
+        ],
+        "title": "RuntimeCleanupSettings"
+      },
+      "RuntimeDataSourceSettings": {
+        "properties": {
+          "configured_source": {
+            "type": "string",
+            "title": "Configured Source"
+          },
+          "configured_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configured Profile"
+          },
+          "actual_source": {
+            "type": "string",
+            "title": "Actual Source"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          }
+        },
+        "type": "object",
+        "required": [
+          "configured_source",
+          "configured_profile",
+          "actual_source",
+          "configured"
+        ],
+        "title": "RuntimeDataSourceSettings"
+      },
+      "RuntimeLlmDispatcherHealth": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "disabled",
+              "not_started",
+              "ok",
+              "degraded"
+            ],
+            "title": "Status"
+          },
+          "worker_count": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Worker Count"
+          },
+          "pending_count": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Pending Count"
+          },
+          "capacity": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Capacity"
+          },
+          "dropped_count": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Dropped Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "worker_count",
+          "pending_count",
+          "capacity",
+          "dropped_count"
+        ],
+        "title": "RuntimeLlmDispatcherHealth"
+      },
+      "RuntimeLlmObservability": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "disabled",
+              "unavailable",
+              "insufficient_data",
+              "ok",
+              "alert"
+            ],
+            "title": "Status"
+          },
+          "window_minutes": {
+            "type": "integer",
+            "maximum": 525600.0,
+            "minimum": 1.0,
+            "title": "Window Minutes"
+          },
+          "minimum_requests": {
+            "type": "integer",
+            "maximum": 1000000.0,
+            "minimum": 1.0,
+            "title": "Minimum Requests"
+          },
+          "request_count": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Request Count"
+          },
+          "retry_count": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Retry Count"
+          },
+          "request_rate_per_minute": {
+            "type": "number",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Request Rate Per Minute"
+          },
+          "success_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Success Rate"
+          },
+          "error_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Error Rate"
+          },
+          "retry_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Retry Rate"
+          },
+          "timeout_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Timeout Rate"
+          },
+          "error_rate_alert_threshold": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Error Rate Alert Threshold"
+          },
+          "timeout_rate_alert_threshold": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Timeout Rate Alert Threshold"
+          },
+          "alerts": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "error_rate",
+                "timeout_rate"
+              ]
+            },
+            "type": "array",
+            "title": "Alerts"
+          },
+          "last_event_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Event At"
+          },
+          "dispatcher": {
+            "$ref": "#/components/schemas/RuntimeLlmDispatcherHealth"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "status",
+          "window_minutes",
+          "minimum_requests",
+          "request_count",
+          "retry_count",
+          "request_rate_per_minute",
+          "success_rate",
+          "error_rate",
+          "retry_rate",
+          "timeout_rate",
+          "error_rate_alert_threshold",
+          "timeout_rate_alert_threshold",
+          "alerts",
+          "last_event_at",
+          "dispatcher"
+        ],
+        "title": "RuntimeLlmObservability"
+      },
+      "RuntimeLlmSettings": {
+        "properties": {
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "mock_mode": {
+            "type": "boolean",
+            "title": "Mock Mode"
+          },
+          "observability": {
+            "$ref": "#/components/schemas/RuntimeLlmObservability"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "model",
+          "configured",
+          "mock_mode",
+          "observability"
+        ],
+        "title": "RuntimeLlmSettings"
+      },
+      "RuntimeRiskSettings": {
+        "properties": {
+          "validity_months": {
+            "type": "integer",
+            "maximum": 120.0,
+            "minimum": 1.0,
+            "title": "Validity Months"
+          }
+        },
+        "type": "object",
+        "required": [
+          "validity_months"
+        ],
+        "title": "RuntimeRiskSettings"
+      },
+      "RuntimeSettingsData": {
+        "properties": {
+          "data_source": {
+            "$ref": "#/components/schemas/RuntimeDataSourceSettings"
+          },
+          "llm": {
+            "$ref": "#/components/schemas/RuntimeLlmSettings"
+          },
+          "yingmi_mcp": {
+            "$ref": "#/components/schemas/RuntimeYingmiMcpSettings"
+          },
+          "risk_assessment": {
+            "$ref": "#/components/schemas/RuntimeRiskSettings"
+          },
+          "cleanup": {
+            "$ref": "#/components/schemas/RuntimeCleanupSettings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data_source",
+          "llm",
+          "yingmi_mcp",
+          "risk_assessment",
+          "cleanup"
+        ],
+        "title": "RuntimeSettingsData"
+      },
+      "RuntimeYingmiMcpSettings": {
+        "properties": {
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "implemented": {
+            "type": "boolean",
+            "title": "Implemented"
+          }
+        },
+        "type": "object",
+        "required": [
+          "configured",
+          "implemented"
+        ],
+        "title": "RuntimeYingmiMcpSettings"
+      },
+      "SchedulerStatus": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "running": {
+            "type": "boolean",
+            "title": "Running"
+          },
+          "schedule_mode": {
+            "type": "string",
+            "enum": [
+              "interval",
+              "cron"
+            ],
+            "title": "Schedule Mode"
+          },
+          "schedule_expression": {
+            "type": "string",
+            "title": "Schedule Expression"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "jitter_seconds": {
+            "type": "integer",
+            "title": "Jitter Seconds"
+          },
+          "misfire_grace_seconds": {
+            "type": "integer",
+            "title": "Misfire Grace Seconds"
+          },
+          "next_run_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run At"
+          },
+          "running_tasks": {
+            "items": {
+              "$ref": "#/components/schemas/JobRunSummary"
+            },
+            "type": "array",
+            "title": "Running Tasks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "running",
+          "schedule_mode",
+          "schedule_expression",
+          "timezone",
+          "jitter_seconds",
+          "misfire_grace_seconds",
+          "next_run_at",
+          "running_tasks"
+        ],
+        "title": "SchedulerStatus"
       },
       "ValidationError": {
         "properties": {

@@ -1,0 +1,127 @@
+name: OpenAPI approval
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted, dismissed]
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  id-token: write
+  attestations: write
+
+jobs:
+  approval:
+    name: Contract change approval
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      OPENAPI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
+    steps:
+      - name: Check out reviewed head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/api/pyproject.toml
+
+      - name: Install API dependencies
+        run: python -m pip install --disable-pip-version-check --editable "./apps/api[dev]"
+
+      - name: Export committed OpenAPI contract
+        shell: pwsh
+        run: |
+          python scripts/export_openapi.py
+          if ($LASTEXITCODE -ne 0) {
+            throw "OpenAPI export failed with exit code $LASTEXITCODE."
+          }
+          git diff --exit-code -- packages/contracts/openapi.json
+          if ($LASTEXITCODE -ne 0) {
+            throw "Committed OpenAPI contract does not match the application export."
+          }
+
+      - name: Detect contract drift from review base
+        id: drift
+        shell: pwsh
+        run: |
+          git diff --quiet "$env:OPENAPI_BASE_SHA" HEAD -- packages/contracts/openapi.json
+          if ($LASTEXITCODE -eq 0) {
+            "has_drift=false" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+          }
+          elseif ($LASTEXITCODE -eq 1) {
+            "has_drift=true" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+          }
+          else {
+            throw "Unable to compare the OpenAPI contract with $env:OPENAPI_BASE_SHA."
+          }
+
+      - name: Require a current non-author PR approval
+        if: steps.drift.outputs.has_drift == 'true' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_review')
+        id: reviews
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100
+            });
+            const latestByReviewer = new Map();
+            for (const review of reviews) {
+              if (review.user?.login) latestByReviewer.set(review.user.login, review);
+            }
+            const author = context.payload.pull_request.user.login;
+            const approved = [...latestByReviewer.entries()]
+              .filter(([login, review]) =>
+                login !== author &&
+                review.state === "APPROVED" &&
+                review.commit_id === context.payload.pull_request.head.sha
+              )
+              .map(([login]) => login)
+              .sort();
+            if (!approved.length) {
+              core.setFailed("OpenAPI drift requires a non-author APPROVED review bound to the current PR head commit.");
+              return;
+            }
+            core.setOutput("reviewers", approved.join(","));
+
+      - name: Verify manifest and build evidence bundle
+        if: steps.drift.outputs.has_drift == 'true'
+        id: evidence
+        shell: pwsh
+        env:
+          APPROVED_REVIEWERS: ${{ steps.reviews.outputs.reviewers }}
+        run: >-
+          ./scripts/verify-openapi-change-approval-ci.ps1
+          -BaseRef "$env:OPENAPI_BASE_SHA"
+          -Reviewers "$env:APPROVED_REVIEWERS"
+
+      - name: Upload immutable review evidence
+        if: steps.drift.outputs.has_drift == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-approval-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/checks/openapi-approval/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Attest OpenAPI approval evidence
+        if: >-
+          steps.drift.outputs.has_drift == 'true' &&
+          (github.event_name == 'push' || github.event.pull_request.head.repo.fork == false)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: output/checks/openapi-approval/**

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "failures": [],
+  "chartFailures": [],
+  "results": [
+    {
+      "name": "dashboard",
+      "path": "/dashboard",
+      "viewportWidth": 390,
+      "bodyScrollWidth": 390,
+      "documentScrollWidth": 390,
+      "overflowingElements": [],
+      "canvases": []
+    },
+    {
+      "name": "compare",
+      "path": "/compare",
+      "viewportWidth": 390,
+      "bodyScrollWidth": 390,
+      "documentScrollWidth": 390,
+      "overflowingElements": [],
+      "canvases": [
+        {
+          "width": 332,
+          "height": 280,
+          "clientWidth": 332,
+          "clientHeight": 280
+        }
+      ]
+    }
+  ]
+}

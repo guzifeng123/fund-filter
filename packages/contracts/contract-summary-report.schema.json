@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://fund-analysis.local/contracts/contract-summary-report.schema.json",
+  "title": "JSON report contract summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ok",
+    "started_at",
+    "finished_at",
+    "duration_ms",
+    "contract_count",
+    "failed_count",
+    "results"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "ok": { "type": "boolean" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "finished_at": { "type": "string", "format": "date-time" },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "contract_count": { "type": "integer", "minimum": 0 },
+    "failed_count": { "type": "integer", "minimum": 0 },
+    "results": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/result" }
+    }
+  },
+  "definitions": {
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "script", "ok", "duration_ms", "error"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "script": { "type": "string", "minLength": 1 },
+        "ok": { "type": "boolean" },
+        "duration_ms": { "type": "integer", "minimum": 0 },
+        "error": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

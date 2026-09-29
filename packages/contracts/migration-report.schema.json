@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://fund-analysis.local/contracts/migration-report.schema.json",
+  "title": "Database migration report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ok",
+    "started_at",
+    "finished_at",
+    "duration_ms",
+    "working_directory",
+    "command",
+    "revision",
+    "sql",
+    "dry_run",
+    "database_url_override",
+    "python_arguments",
+    "exit_code",
+    "error"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "ok": { "type": "boolean" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "finished_at": { "type": "string", "format": "date-time" },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "working_directory": { "type": "string", "minLength": 1 },
+    "command": {
+      "enum": ["upgrade", "downgrade", "current", "history", "heads"]
+    },
+    "revision": { "type": "string" },
+    "sql": { "type": "boolean" },
+    "dry_run": { "type": "boolean" },
+    "database_url_override": { "type": "boolean" },
+    "python_arguments": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 4
+    },
+    "exit_code": { "type": ["integer", "null"] },
+    "error": { "type": ["string", "null"] }
+  }
+}

@@ -4,7 +4,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import Fund, Portfolio, PortfolioPosition
+from app.repositories.fund_snapshots import active_snapshot_generation_expression
 from app.schemas.portfolio import (
+    PortfolioAvailabilityReason,
     PortfolioCreateRequest,
     PortfolioDetail,
     PortfolioPosition as PortfolioPositionSchema,
@@ -16,10 +18,27 @@ from app.schemas.portfolio import (
 )
 
 TEMPLATES = [
-    PortfolioTemplate(id="conservative", name="保守型", stock_ratio=20, bond_ratio=80, suitable_profiles=["C1", "C2"]),
-    PortfolioTemplate(id="balanced", name="稳健型", stock_ratio=50, bond_ratio=50, suitable_profiles=["C2", "C3"]),
-    PortfolioTemplate(id="growth", name="进取型", stock_ratio=80, bond_ratio=20, suitable_profiles=["C4", "C5"]),
+    PortfolioTemplate(
+        id="conservative",
+        name="保守型",
+        stock_ratio=20,
+        bond_ratio=80,
+        suitable_profiles=["C1", "C2"],
+    ),
+    PortfolioTemplate(
+        id="balanced", name="稳健型", stock_ratio=50, bond_ratio=50, suitable_profiles=["C2", "C3"]
+    ),
+    PortfolioTemplate(
+        id="growth", name="进取型", stock_ratio=80, bond_ratio=20, suitable_profiles=["C4", "C5"]
+    ),
 ]
+
+
+class UnavailablePortfolioPositionsError(ValueError):
+    def __init__(self, unavailable_fund_codes: list[str]) -> None:
+        super().__init__("portfolio contains positions removed from the active fund snapshot")
+        self.unavailable_fund_codes = unavailable_fund_codes
+        self.availability_reason = "removed_from_active_snapshot"
 
 
 def list_templates() -> list[PortfolioTemplate]:
@@ -48,7 +67,32 @@ def ensure_default_portfolios(db: Session) -> None:
             )
 
 
-def _to_summary(row: Portfolio) -> PortfolioSummary:
+def _position_is_available(position: PortfolioPosition, active_generation_id: str) -> bool:
+    return position.fund.snapshot_generation_id == active_generation_id
+
+
+def _position_availability_reason(
+    position: PortfolioPosition, active_generation_id: str
+) -> PortfolioAvailabilityReason:
+    if _position_is_available(position, active_generation_id):
+        return "available"
+    return "removed_from_active_snapshot"
+
+
+def _unavailable_fund_codes(
+    positions: list[PortfolioPosition], active_generation_id: str
+) -> list[str]:
+    return [
+        position.fund_code
+        for position in positions
+        if not _position_is_available(position, active_generation_id)
+    ]
+
+
+def _to_summary(row: Portfolio, active_generation_id: str) -> PortfolioSummary:
+    unavailable_position_count = sum(
+        not _position_is_available(position, active_generation_id) for position in row.positions
+    )
     return PortfolioSummary(
         id=row.id,
         name=row.name,
@@ -56,12 +100,19 @@ def _to_summary(row: Portfolio) -> PortfolioSummary:
         stock_ratio=row.stock_ratio,
         bond_ratio=row.bond_ratio,
         position_count=len(row.positions),
+        unavailable_position_count=unavailable_position_count,
     )
 
 
-def _to_position(row: PortfolioPosition, total_weight: float) -> PortfolioPositionSchema:
+def _to_position(
+    row: PortfolioPosition,
+    total_weight: float,
+    active_generation_id: str,
+) -> PortfolioPositionSchema:
     fund = row.fund
-    normalized_weight = round(row.weight_percent / total_weight * 100, 2) if total_weight > 0 else None
+    normalized_weight = (
+        round(row.weight_percent / total_weight * 100, 2) if total_weight > 0 else None
+    )
     return PortfolioPositionSchema(
         fund_code=row.fund_code,
         fund_name=fund.name,
@@ -69,6 +120,8 @@ def _to_position(row: PortfolioPosition, total_weight: float) -> PortfolioPositi
         risk_level=fund.risk_level,
         weight_percent=row.weight_percent,
         normalized_weight_percent=normalized_weight,
+        available=_position_is_available(row, active_generation_id),
+        availability_reason=_position_availability_reason(row, active_generation_id),
     )
 
 
@@ -80,23 +133,37 @@ def _weight_warning(total_weight: float) -> str | None:
     return f"当前持仓权重合计为 {total_weight:.2f}%，可参考归一化比例检查配置。"
 
 
-def _to_detail(row: Portfolio) -> PortfolioDetail:
-    summary = _to_summary(row)
+def _to_detail(row: Portfolio, active_generation_id: str) -> PortfolioDetail:
+    summary = _to_summary(row, active_generation_id)
     total_weight = round(sum(position.weight_percent for position in row.positions), 2)
     return PortfolioDetail(
         **summary.model_dump(),
-        positions=[_to_position(position, total_weight) for position in row.positions],
+        positions=[
+            _to_position(position, total_weight, active_generation_id) for position in row.positions
+        ],
         total_weight_percent=total_weight,
         weight_warning=_weight_warning(total_weight),
     )
 
 
 def list_portfolios(db: Session) -> list[PortfolioSummary]:
-    rows = db.scalars(select(Portfolio).options(joinedload(Portfolio.positions)).order_by(Portfolio.id)).unique().all()
-    return [_to_summary(row) for row in rows]
+    active_generation = active_snapshot_generation_expression().label("active_generation_id")
+    rows = (
+        db.execute(
+            select(Portfolio, active_generation)
+            .options(joinedload(Portfolio.positions).joinedload(PortfolioPosition.fund))
+            .execution_options(populate_existing=True)
+            .order_by(Portfolio.id)
+        )
+        .unique()
+        .all()
+    )
+    return [_to_summary(row[0], row[1]) for row in rows]
 
 
-def create_portfolio(db: Session, payload: PortfolioCreateRequest, user_id: str = "local-user") -> PortfolioDetail:
+def create_portfolio(
+    db: Session, payload: PortfolioCreateRequest, user_id: str = "local-user"
+) -> PortfolioDetail:
     template = _template_by_id(payload.template_key)
     if template is None:
         raise ValueError("unknown template")
@@ -111,22 +178,42 @@ def create_portfolio(db: Session, payload: PortfolioCreateRequest, user_id: str 
     )
     db.add(row)
     db.commit()
-    db.refresh(row)
-    return _to_detail(row)
+    detail = get_portfolio(db, row.id)
+    assert detail is not None
+    return detail
+
+
+def _portfolio_with_active_generation(
+    db: Session,
+    portfolio_id: str,
+) -> tuple[Portfolio, str] | None:
+    active_generation = active_snapshot_generation_expression().label("active_generation_id")
+    result = (
+        db.execute(
+            select(Portfolio, active_generation)
+            .where(Portfolio.id == portfolio_id)
+            .options(joinedload(Portfolio.positions).joinedload(PortfolioPosition.fund))
+            .execution_options(populate_existing=True)
+        )
+        .unique()
+        .one_or_none()
+    )
+    if result is None:
+        return None
+    return result[0], result[1]
 
 
 def get_portfolio(db: Session, portfolio_id: str) -> PortfolioDetail | None:
-    row = db.scalars(
-        select(Portfolio)
-        .where(Portfolio.id == portfolio_id)
-        .options(joinedload(Portfolio.positions).joinedload(PortfolioPosition.fund))
-    ).unique().first()
-    if row is None:
+    loaded = _portfolio_with_active_generation(db, portfolio_id)
+    if loaded is None:
         return None
-    return _to_detail(row)
+    row, active_generation_id = loaded
+    return _to_detail(row, active_generation_id)
 
 
-def update_portfolio(db: Session, portfolio_id: str, payload: PortfolioUpdateRequest) -> PortfolioDetail | None:
+def update_portfolio(
+    db: Session, portfolio_id: str, payload: PortfolioUpdateRequest
+) -> PortfolioDetail | None:
     row = db.get(Portfolio, portfolio_id)
     if row is None:
         return None
@@ -144,11 +231,22 @@ def delete_portfolio(db: Session, portfolio_id: str) -> bool:
     return True
 
 
-def upsert_position(db: Session, portfolio_id: str, payload: PortfolioPositionRequest) -> PortfolioDetail | None:
+def upsert_position(
+    db: Session, portfolio_id: str, payload: PortfolioPositionRequest
+) -> PortfolioDetail | None:
     portfolio = db.get(Portfolio, portfolio_id)
     if portfolio is None:
         return None
-    if db.get(Fund, payload.fund_code) is None:
+    generation_id = active_snapshot_generation_expression()
+    if (
+        db.scalar(
+            select(Fund.code).where(
+                Fund.code == payload.fund_code,
+                Fund.snapshot_generation_id == generation_id,
+            )
+        )
+        is None
+    ):
         raise ValueError("fund not found")
     row = db.scalars(
         select(PortfolioPosition).where(
@@ -157,7 +255,9 @@ def upsert_position(db: Session, portfolio_id: str, payload: PortfolioPositionRe
         )
     ).first()
     if row is None:
-        row = PortfolioPosition(portfolio_id=portfolio_id, fund_code=payload.fund_code, metadata_={})
+        row = PortfolioPosition(
+            portfolio_id=portfolio_id, fund_code=payload.fund_code, metadata_={}
+        )
         db.add(row)
     row.weight_percent = payload.weight_percent
     db.commit()
@@ -179,14 +279,35 @@ def delete_position(db: Session, portfolio_id: str, fund_code: str) -> Portfolio
     return get_portfolio(db, portfolio_id)
 
 
-def rebalance_preview(db: Session, portfolio_id: str) -> RebalancePreview | None:
-    row = db.scalars(
-        select(Portfolio)
-        .where(Portfolio.id == portfolio_id)
-        .options(joinedload(Portfolio.positions).joinedload(PortfolioPosition.fund))
-    ).unique().first()
-    if row is None:
+def normalize_position_weights(db: Session, portfolio_id: str) -> PortfolioDetail | None:
+    loaded = _portfolio_with_active_generation(db, portfolio_id)
+    if loaded is None:
         return None
+    row, active_generation_id = loaded
+    positions = sorted(row.positions, key=lambda position: (position.id or 0, position.fund_code))
+    unavailable_fund_codes = _unavailable_fund_codes(positions, active_generation_id)
+    if unavailable_fund_codes:
+        raise UnavailablePortfolioPositionsError(unavailable_fund_codes)
+    total_weight = sum(position.weight_percent for position in positions)
+    if not positions or total_weight <= 0:
+        raise ValueError("portfolio requires at least one positive position weight")
+    assigned_weight = 0.0
+    for position in positions[:-1]:
+        position.weight_percent = round(position.weight_percent / total_weight * 100, 6)
+        assigned_weight += position.weight_percent
+    positions[-1].weight_percent = round(100 - assigned_weight, 6)
+    db.commit()
+    return get_portfolio(db, portfolio_id)
+
+
+def rebalance_preview(db: Session, portfolio_id: str) -> RebalancePreview | None:
+    loaded = _portfolio_with_active_generation(db, portfolio_id)
+    if loaded is None:
+        return None
+    row, active_generation_id = loaded
+    unavailable_fund_codes = _unavailable_fund_codes(row.positions, active_generation_id)
+    if unavailable_fund_codes:
+        raise UnavailablePortfolioPositionsError(unavailable_fund_codes)
     stock_weight = 0.0
     bond_weight = 0.0
     for position in row.positions:

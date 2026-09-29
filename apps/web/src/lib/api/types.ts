@@ -2,7 +2,7 @@ import type { RiskLevel, RiskProfile } from "@/lib/compliance/constants";
 
 export type ApiMeta = {
   source: string;
-  data_updated_at: string;
+  data_updated_at: string | null;
   disclaimer: string;
   pagination?: { page: number; page_size: number; total: number } | null;
 };
@@ -23,6 +23,7 @@ export type ApiErrorPayload = {
 
 export type DataStatus = {
   db_connected: boolean;
+  source: string;
   fund_count: number;
   nav_count: number;
   latest_data_updated_at: string | null;
@@ -44,6 +45,85 @@ export type JobRunSummary = {
   finished_at: string | null;
   error_detail: string | null;
   details: Record<string, unknown>;
+};
+
+export type DashboardFeatureStatus = "available" | "unavailable" | "not_configured";
+
+export type DashboardData = {
+  risk_profile: string;
+  risk_status: "not_assessed" | "valid" | "expires_soon" | "expired";
+  risk_notice: string;
+  health: string;
+  portfolio_health_status: DashboardFeatureStatus;
+  watchlist_updated_at: string | null;
+  watchlist_status: DashboardFeatureStatus;
+  alerts: string[];
+  alerts_status: DashboardFeatureStatus;
+  data_status: DataStatus;
+  recent_job: JobRunSummary | null;
+};
+
+export type RuntimeSettingsData = {
+  data_source: {
+    configured_source: string;
+    configured_profile: string | null;
+    actual_source: string;
+    configured: boolean;
+  };
+  llm: {
+    provider: string | null;
+    model: string | null;
+    configured: boolean;
+    mock_mode: boolean;
+    observability: {
+      enabled: boolean;
+      status: "disabled" | "unavailable" | "insufficient_data" | "ok" | "alert";
+      window_minutes: number;
+      minimum_requests: number;
+      request_count: number;
+      retry_count: number;
+      request_rate_per_minute: number;
+      success_rate: number;
+      error_rate: number;
+      retry_rate: number;
+      timeout_rate: number;
+      error_rate_alert_threshold: number;
+      timeout_rate_alert_threshold: number;
+      alerts: Array<"error_rate" | "timeout_rate">;
+      last_event_at: string | null;
+      dispatcher: {
+        status: "disabled" | "not_started" | "ok" | "degraded";
+        worker_count: number;
+        pending_count: number;
+        capacity: number;
+        dropped_count: number;
+      };
+    };
+  };
+  yingmi_mcp: {
+    configured: boolean;
+    implemented: boolean;
+  };
+  risk_assessment: {
+    validity_months: number;
+  };
+  cleanup: {
+    method: "manual_script";
+    dry_run_supported: boolean;
+    automatic_cleanup_supported: boolean;
+  };
+};
+
+export type SchedulerStatus = {
+  enabled: boolean;
+  running: boolean;
+  schedule_mode: "interval" | "cron";
+  schedule_expression: string;
+  timezone: string;
+  jitter_seconds: number;
+  misfire_grace_seconds: number;
+  next_run_at: string | null;
+  running_tasks: JobRunSummary[];
 };
 
 export type DataSyncResult = {
@@ -122,6 +202,7 @@ export type FundDetail = Fund & {
 };
 
 export type FundFilterRequest = {
+  keyword?: string;
   risk_profile: RiskProfile;
   fund_types: Fund["fund_type"][];
   min_years: number;
@@ -156,7 +237,7 @@ export type PortfolioTemplate = {
   name: string;
   stock_ratio: number;
   bond_ratio: number;
-  suitable_profiles: RiskProfile[];
+  suitable_profiles: ReadonlyArray<RiskProfile>;
 };
 
 export type PortfolioSummary = {
@@ -166,6 +247,7 @@ export type PortfolioSummary = {
   stock_ratio: number;
   bond_ratio: number;
   position_count: number;
+  unavailable_position_count: number;
 };
 
 export type PortfolioDetail = PortfolioSummary & {
@@ -176,6 +258,8 @@ export type PortfolioDetail = PortfolioSummary & {
     risk_level: RiskLevel;
     weight_percent: number;
     normalized_weight_percent: number | null;
+    available: boolean;
+    availability_reason: "available" | "removed_from_active_snapshot";
   }>;
   total_weight_percent: number;
   weight_warning: string | null;
@@ -201,6 +285,10 @@ export type BacktestResult = {
   sharpe_ratio: number;
   total_invested: number;
   final_value: number;
+  money_weighted_return: number;
+  time_weighted_return: number;
+  return_calculation_method: "xirr" | "unavailable";
+  snapshot_generation_id: string | null;
   data_warning: string | null;
   points: Array<{ date: string; portfolio: number; benchmark: number }>;
 };

@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings as config_settings
 from app.data_sources import get_fund_data_source
 from app.data_sources.csv_local import CsvLocalFundDataSource, preflight_csv_local
 from app.db.models import Fund, FundNav
@@ -54,20 +55,30 @@ def test_csv_local_can_be_selected_by_name() -> None:
     assert source.name == "csv_local"
 
 
-def test_csv_local_sync_writes_database(db_session: Session, tmp_path: Path, monkeypatch) -> None:
+def test_csv_local_sync_writes_database(
+    db_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     write_csv_fixture(tmp_path)
     monkeypatch.setenv("FUND_CSV_DIR", str(tmp_path))
-    import app.core.config as config
-    import app.data_sources.csv_local as csv_local
-
-    config.settings.fund_csv_dir = str(tmp_path)
-    csv_local.settings.fund_csv_dir = str(tmp_path)
+    monkeypatch.setattr(config_settings, "fund_csv_dir", str(tmp_path))
 
     result = sync_fund_navs(db_session, "csv_local")
 
-    assert result == {"source": "csv_local", "fund_count": 1, "nav_count": 2}
+    assert result["source"] == "csv_local"
+    assert result["fund_count"] == 1
+    assert result["nav_count"] == 2
+    assert result["requested_task"] == "navs"
+    assert result["effective_scope"] == "full_snapshot"
+    assert result["generation_boundary"] == "atomic_promotion"
     assert db_session.get(Fund, "900001") is not None
-    assert db_session.scalar(select(func.count()).select_from(FundNav).where(FundNav.fund_code == "900001")) == 2
+    assert (
+        db_session.scalar(
+            select(func.count()).select_from(FundNav).where(FundNav.fund_code == "900001")
+        )
+        == 2
+    )
 
 
 def test_csv_local_reports_missing_required_columns(tmp_path: Path) -> None:
@@ -86,7 +97,9 @@ def test_csv_local_reports_invalid_numeric_field_with_line_number(tmp_path: Path
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match=r"funds\.csv:2: invalid numeric CSV field fund_size_billion=not-a-number"):
+    with pytest.raises(
+        ValueError, match=r"funds\.csv:2: invalid numeric CSV field fund_size_billion=not-a-number"
+    ):
         CsvLocalFundDataSource(tmp_path).fetch_fund_profiles()
 
 
@@ -99,6 +112,26 @@ def test_csv_local_preflight_reports_counts(tmp_path: Path) -> None:
     assert report["fund_count"] == 1
     assert report["nav_count"] == 2
     assert report["errors"] == []
+
+
+def test_csv_local_preflight_propagates_threshold_warnings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_csv_fixture(tmp_path)
+    monkeypatch.setattr(config_settings, "fund_nav_value_max", 1.05)
+    monkeypatch.setattr(config_settings, "fund_nav_reject_anomalies", False)
+
+    warning_report = preflight_csv_local(tmp_path)
+
+    assert warning_report["ok"] is True
+    assert warning_report["quality_warnings"][0]["field"] == "nav"
+
+    monkeypatch.setattr(config_settings, "fund_nav_reject_anomalies", True)
+    rejected_report = preflight_csv_local(tmp_path)
+
+    assert rejected_report["ok"] is False
+    assert "anomaly rejection is enabled" in rejected_report["errors"][-1]
 
 
 def test_csv_local_preflight_reports_errors(tmp_path: Path) -> None:
@@ -132,7 +165,9 @@ def test_csv_local_rejects_duplicate_fund_codes_with_both_line_numbers(tmp_path:
     with funds_path.open("a", encoding="utf-8") as file:
         file.write(f"{duplicate_row}\n")
 
-    with pytest.raises(ValueError, match=r"funds\.csv:3: duplicate fund code 900001; first seen at line 2"):
+    with pytest.raises(
+        ValueError, match=r"funds\.csv:3: duplicate fund code 900001; first seen at line 2"
+    ):
         CsvLocalFundDataSource(tmp_path).fetch_fund_profiles()
 
     report = preflight_csv_local(tmp_path)
@@ -146,7 +181,9 @@ def test_csv_local_rejects_duplicate_nav_keys_with_both_line_numbers(tmp_path: P
     with (tmp_path / "navs.csv").open("a", encoding="utf-8") as file:
         file.write("900001,2024-01-02,1.2,1.2\n")
 
-    with pytest.raises(ValueError, match=r"navs\.csv:4: duplicate NAV key 900001/2024-01-02; first seen at line 2"):
+    with pytest.raises(
+        ValueError, match=r"navs\.csv:4: duplicate NAV key 900001/2024-01-02; first seen at line 2"
+    ):
         CsvLocalFundDataSource(tmp_path).fetch_fund_profiles()
 
     report = preflight_csv_local(tmp_path)
@@ -179,7 +216,12 @@ def test_csv_local_trims_fields_before_cross_file_and_unique_key_checks(tmp_path
 @pytest.mark.parametrize(
     ("filename", "old_value", "new_value", "expected"),
     [
-        ("funds.csv", "2020-01-01", "2020-02-30", "invalid ISO date field inception_date=2020-02-30"),
+        (
+            "funds.csv",
+            "2020-01-01",
+            "2020-02-30",
+            "invalid ISO date field inception_date=2020-02-30",
+        ),
         (
             "funds.csv",
             "2026-07-09T10:00:00+08:00",
@@ -204,7 +246,9 @@ def test_csv_local_rejects_invalid_iso_dates(
 ) -> None:
     write_csv_fixture(tmp_path)
     path = tmp_path / filename
-    path.write_text(path.read_text(encoding="utf-8").replace(old_value, new_value), encoding="utf-8")
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(old_value, new_value), encoding="utf-8"
+    )
 
     report = preflight_csv_local(tmp_path)
 
@@ -217,7 +261,12 @@ def test_csv_local_rejects_invalid_iso_dates(
     [
         ("funds.csv", ",12.5,", ",-1,", "fund_size_billion must be >= 0"),
         ("funds.csv", ",1.0,0.2,", ",101,0.2,", "management_fee must be between 0 and 100"),
-        ("funds.csv", ",1.21,20,5,", ",1.21,101,5,", "category_rank_percentile must be between 0 and 100"),
+        (
+            "funds.csv",
+            ",1.21,20,5,",
+            ",1.21,101,5,",
+            "category_rank_percentile must be between 0 and 100",
+        ),
         ("funds.csv", ",20,5,", ",20,5.5,", "manager_years must be a non-negative integer"),
         ("funds.csv", ",-12.3,", ",1.0,", "max_drawdown must be between -100 and 0"),
         ("navs.csv", ",1.1,1.1", ",0,1.1", "nav must be > 0"),
@@ -233,7 +282,9 @@ def test_csv_local_rejects_out_of_range_numeric_values(
 ) -> None:
     write_csv_fixture(tmp_path)
     path = tmp_path / filename
-    path.write_text(path.read_text(encoding="utf-8").replace(old_value, new_value, 1), encoding="utf-8")
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(old_value, new_value, 1), encoding="utf-8"
+    )
 
     report = preflight_csv_local(tmp_path)
 

@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 RiskProfile = Literal["C1", "C2", "C3", "C4", "C5"]
+PortfolioAvailabilityReason = Literal["available", "removed_from_active_snapshot"]
 
 
 class PortfolioTemplate(BaseModel):
@@ -20,6 +21,8 @@ class PortfolioPosition(BaseModel):
     risk_level: str
     weight_percent: float
     normalized_weight_percent: float | None = None
+    available: bool
+    availability_reason: PortfolioAvailabilityReason
 
 
 class PortfolioSummary(BaseModel):
@@ -29,6 +32,7 @@ class PortfolioSummary(BaseModel):
     stock_ratio: int
     bond_ratio: int
     position_count: int = 0
+    unavailable_position_count: int = Field(ge=0)
 
 
 class PortfolioDetail(PortfolioSummary):
@@ -60,3 +64,7 @@ class RebalancePreview(BaseModel):
     target_stock_ratio: float = 0
     target_bond_ratio: float = 0
     triggered: bool = False
+
+
+class PortfolioDeleteResult(BaseModel):
+    deleted: bool

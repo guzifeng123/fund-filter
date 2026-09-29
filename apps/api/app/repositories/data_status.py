@@ -1,23 +1,30 @@
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import desc, func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import Fund, FundNav, JobRun
-from app.schemas.data import DataFreshnessStatus, DataStatus, JobRunSummary, LastJob
+from app.repositories.fund_snapshots import active_snapshot_generation_expression
+from app.repositories.funds import fund_data_source_summary, latest_fund_data_updated_at
+from app.schemas.data import DataFreshnessStatus, DataStatus, JobRunSummary, JobStatus, LastJob
 
 
-def _error_detail(details: dict | None) -> str | None:
+def _error_detail(details: dict[str, Any] | None) -> str | None:
     if not details:
         return None
     error = details.get("error") or details.get("error_detail")
     return str(error) if error else None
 
 
-def _job_status(value: str):
-    if value in {"running", "success", "failed"}:
-        return value
+def _job_status(value: str) -> JobStatus:
+    if value == "running":
+        return "running"
+    if value == "success":
+        return "success"
+    if value == "failed":
+        return "failed"
     return "failed"
 
 
@@ -63,13 +70,27 @@ def _to_job_summary(row: JobRun) -> JobRunSummary:
 
 def get_data_status(db: Session) -> DataStatus:
     db.execute(text("SELECT 1"))
-    fund_count = db.scalar(select(func.count()).select_from(Fund)) or 0
-    nav_count = db.scalar(select(func.count()).select_from(FundNav)) or 0
-    latest_data_updated_at = db.scalar(select(func.max(Fund.data_updated_at)))
+    generation_id = active_snapshot_generation_expression()
+    fund_count = db.scalar(
+        select(func.count()).select_from(Fund).where(
+            Fund.snapshot_generation_id == generation_id
+        )
+    ) or 0
+    nav_count = db.scalar(
+        select(func.count())
+        .select_from(FundNav)
+        .join(Fund, Fund.code == FundNav.fund_code)
+        .where(
+            FundNav.snapshot_generation_id == generation_id,
+            Fund.snapshot_generation_id == generation_id,
+        )
+    ) or 0
+    latest_data_updated_at = latest_fund_data_updated_at(db)
     last_job_row = db.scalars(select(JobRun).order_by(desc(JobRun.finished_at), desc(JobRun.started_at)).limit(1)).first()
     last_job = _to_last_job(last_job_row) if last_job_row else None
     return DataStatus(
         db_connected=True,
+        source=fund_data_source_summary(db),
         fund_count=fund_count,
         nav_count=nav_count,
         latest_data_updated_at=latest_data_updated_at.isoformat() if latest_data_updated_at else None,
@@ -81,4 +102,9 @@ def get_data_status(db: Session) -> DataStatus:
 
 def list_recent_job_runs(db: Session, limit: int = 10) -> list[JobRunSummary]:
     stmt = select(JobRun).order_by(desc(JobRun.started_at), desc(JobRun.id)).limit(limit)
+    return [_to_job_summary(row) for row in db.scalars(stmt).all()]
+
+
+def list_running_job_runs(db: Session) -> list[JobRunSummary]:
+    stmt = select(JobRun).where(JobRun.status == "running").order_by(JobRun.started_at, JobRun.id)
     return [_to_job_summary(row) for row in db.scalars(stmt).all()]

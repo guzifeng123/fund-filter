@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://fund-analysis.local/contracts/smoke-report.schema.json",
+  "title": "API smoke report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "api_base",
+    "started_at",
+    "finished_at",
+    "duration_ms",
+    "seed_if_empty",
+    "require_fresh",
+    "ok",
+    "environment",
+    "steps",
+    "summary"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "api_base": { "type": "string", "minLength": 1 },
+    "started_at": { "type": "string", "format": "date-time" },
+    "finished_at": { "type": "string", "format": "date-time" },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "seed_if_empty": { "type": "boolean" },
+    "require_fresh": { "type": "boolean" },
+    "ok": { "type": "boolean" },
+    "environment": { "$ref": "#/definitions/environment" },
+    "steps": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/step" }
+    },
+    "summary": { "$ref": "#/definitions/summary" }
+  },
+  "definitions": {
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "powershell_version",
+        "node_version",
+        "npm_version",
+        "git_commit",
+        "openapi_commit",
+        "openapi_sha256"
+      ],
+      "properties": {
+        "os": { "type": ["string", "null"] },
+        "powershell_version": { "type": ["string", "null"] },
+        "node_version": { "type": ["string", "null"] },
+        "npm_version": { "type": ["string", "null"] },
+        "git_commit": { "type": ["string", "null"] },
+        "openapi_commit": { "type": ["string", "null"] },
+        "openapi_sha256": { "type": ["string", "null"] }
+      }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "ok", "duration_ms", "error"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "ok": { "type": "boolean" },
+        "duration_ms": { "type": "integer", "minimum": 0 },
+        "error": { "type": ["string", "null"] }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "db_connected": { "type": "boolean" },
+        "fund_count": { "type": "integer", "minimum": 0 },
+        "nav_count": { "type": "integer", "minimum": 0 },
+        "freshness_status": { "type": "string" },
+        "latest_data_updated_at": { "type": ["string", "null"] },
+        "filter_result_count": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

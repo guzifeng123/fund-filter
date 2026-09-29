@@ -6,10 +6,12 @@ import { ComplianceNotice } from "@/components/compliance-notice";
 import { DataFreshnessBadge } from "@/components/data-freshness-badge";
 import { ErrorState } from "@/components/error-state";
 import { LoadingBlock } from "@/components/loading-block";
+import { MetricLabel } from "@/components/metric-label";
 import { MetricTile } from "@/components/metric-tile";
 import { RiskLevelBadge } from "@/components/risk-level-badge";
 import { StaleDataNotice } from "@/components/stale-data-notice";
 import { apiClient } from "@/lib/api/client";
+import { getApiErrorMessage } from "@/lib/api/error-message";
 import type { FundDetail } from "@/lib/api/types";
 import { COMPLIANCE_MESSAGES, type RiskProfile } from "@/lib/compliance/constants";
 import { resolveEffectiveRiskProfile } from "@/lib/risk/effective-profile";
@@ -70,7 +72,7 @@ export function FundDetailPanel({ code, riskProfile }: { code?: string; riskProf
       <div className="grid gap-3">
         <ErrorState
           title="基金详情加载失败"
-          description="无法读取基金指标和净值数据，请检查基金代码或 API 服务后重试。"
+          description={getApiErrorMessage(query.error, "无法读取基金指标和净值数据，请检查基金代码或 API 服务后重试。")}
           onRetry={() => void query.refetch()}
         />
         <ComplianceNotice>{COMPLIANCE_MESSAGES.fundDetailUnavailable}</ComplianceNotice>
@@ -106,11 +108,11 @@ export function FundDetailPanel({ code, riskProfile }: { code?: string; riskProf
       </div>
       <FundNavSummary navs={fund.navs} />
       <div className="grid grid-cols-2 gap-2">
-        <MetricTile label="3年年化" value={`${fund.annualized_return_3y.toFixed(2)}%`} />
-        <MetricTile label="最大回撤" value={`${fund.max_drawdown.toFixed(2)}%`} />
-        <MetricTile label="夏普比率" value={fund.sharpe_ratio.toFixed(2)} />
-        <MetricTile label="同类排名" value={`前 ${fund.category_rank_percentile.toFixed(0)}%`} />
-        <MetricTile label="费用合计" value={`${(fund.fee_summary?.total_fee ?? fund.management_fee).toFixed(2)}%`} />
+        <MetricTile label={<MetricLabel metricKey="annualized_return_3y" />} value={`${fund.annualized_return_3y.toFixed(2)}%`} />
+        <MetricTile label={<MetricLabel metricKey="max_drawdown" />} value={`${fund.max_drawdown.toFixed(2)}%`} />
+        <MetricTile label={<MetricLabel metricKey="sharpe_ratio" />} value={fund.sharpe_ratio.toFixed(2)} />
+        <MetricTile label={<MetricLabel metricKey="category_rank_percentile" />} value={`前 ${fund.category_rank_percentile.toFixed(0)}%`} />
+        <MetricTile label={<MetricLabel metricKey="fee" />} value={`${(fund.fee_summary?.total_fee ?? fund.management_fee).toFixed(2)}%`} />
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         <section className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
@@ -146,17 +148,27 @@ export function FundDetailPanel({ code, riskProfile }: { code?: string; riskProf
           ))}
         </div>
       </section>
-      <ChartCard
-        title="历史净值"
-        source={fund.source}
-        option={{
-          tooltip: { trigger: "axis" },
-          grid: { left: 36, right: 12, top: 20, bottom: 28 },
-          xAxis: { type: "category", data: fund.navs.map((point) => point.trade_date) },
-          yAxis: { type: "value", scale: true },
-          series: [{ type: "line", smooth: true, data: fund.navs.map((point) => point.accumulated_nav), color: "#0f766e" }]
-        }}
-      />
+      {fund.navs.length ? (
+        <ChartCard
+          title="历史净值"
+          source={fund.source}
+          option={{
+            tooltip: { trigger: "axis" },
+            grid: { left: 36, right: 12, top: 20, bottom: 28 },
+            xAxis: { type: "category", data: fund.navs.map((point) => point.trade_date) },
+            yAxis: { type: "value", scale: true },
+            series: [{ type: "line", smooth: true, data: fund.navs.map((point) => point.accumulated_nav), color: "#0f766e" }]
+          }}
+        />
+      ) : (
+        <ChartCard
+          title="历史净值"
+          source={fund.source}
+          status="empty"
+          emptyTitle="暂无净值数据"
+          emptyDescription="该基金尚无可用净值点，请先确认数据源和同步任务。"
+        />
+      )}
       <ComplianceNotice />
     </div>
   );

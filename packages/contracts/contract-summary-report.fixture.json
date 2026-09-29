@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "started_at": "2026-07-12T00:00:00.0000000Z",
+  "finished_at": "2026-07-12T00:00:01.0000000Z",
+  "duration_ms": 1000,
+  "contract_count": 2,
+  "failed_count": 0,
+  "results": [
+    {
+      "name": "artifact alerts contract",
+      "script": "scripts\\check-artifact-alerts-contract.ps1",
+      "ok": true,
+      "duration_ms": 120,
+      "error": null
+    },
+    {
+      "name": "cleanup report contract",
+      "script": "scripts\\check-cleanup-report-contract.ps1",
+      "ok": true,
+      "duration_ms": 140,
+      "error": null
+    }
+  ]
+}

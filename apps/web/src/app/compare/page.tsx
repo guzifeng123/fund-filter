@@ -8,10 +8,12 @@ import { ComplianceNotice } from "@/components/compliance-notice";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { LoadingBlock } from "@/components/loading-block";
+import { MetricLabel } from "@/components/metric-label";
 import { PageHeader } from "@/components/page-header";
 import { RiskLevelBadge } from "@/components/risk-level-badge";
 import { StaleDataNotice } from "@/components/stale-data-notice";
 import { apiClient } from "@/lib/api/client";
+import { getApiErrorMessage } from "@/lib/api/error-message";
 import type { Fund } from "@/lib/api/types";
 import { riskProfileComplianceMessage, RISK_PROFILE_LIMITS } from "@/lib/compliance/constants";
 import { resolveEffectiveRiskProfile } from "@/lib/risk/effective-profile";
@@ -46,7 +48,7 @@ function ComparePageContent() {
   const query = useQuery({
     queryKey: ["compare", codes],
     queryFn: () => apiClient.compareFunds(codes),
-    enabled: codes.length > 0 && !riskQuery.isLoading
+    enabled: codes.length >= 2 && !riskQuery.isLoading
   });
   const funds = useMemo(() => query.data?.data ?? [], [query.data?.data]);
   const bestReturn = useMemo(() => bestCode(funds, (fund) => fund.annualized_return_5y), [funds]);
@@ -60,10 +62,12 @@ function ComparePageContent() {
       <PageHeader title="基金比较" description="最多比较 5 只基金，固定展示收益、风险、费用、经理和风险匹配。" />
       {!codes.length ? (
         <EmptyState title="还没有选择基金" description="请先在基金筛选页加入 2-5 只基金后进入比较。" />
+      ) : codes.length < 2 ? (
+        <EmptyState title="至少选择 2 只基金" description="单只基金请在详情页查看；比较需要 2-5 只不同基金。" />
       ) : riskQuery.isLoading || query.isLoading ? <LoadingBlock /> : query.isError ? (
         <ErrorState
           title="基金比较加载失败"
-          description="无法获取比较池基金数据，请确认所选基金代码和 API 服务状态后重试。"
+          description={getApiErrorMessage(query.error, "无法获取比较池基金数据，请确认所选基金代码和 API 服务状态后重试。")}
           onRetry={() => void query.refetch()}
         />
       ) : (
@@ -75,11 +79,11 @@ function ComparePageContent() {
                 <tr>
                   <th className="p-3">基金</th>
                   <th className="p-3">风险</th>
-                  <th className="p-3 text-right">5年年化</th>
-                  <th className="p-3 text-right">最大回撤</th>
-                  <th className="p-3 text-right">夏普</th>
-                  <th className="p-3 text-right">费用</th>
-                  <th className="p-3 text-right">经理年限</th>
+                  <th className="p-3 text-right"><MetricLabel metricKey="annualized_return_5y" align="right" /></th>
+                  <th className="p-3 text-right"><MetricLabel metricKey="max_drawdown" align="right" /></th>
+                  <th className="p-3 text-right"><MetricLabel metricKey="sharpe_ratio" align="right" /></th>
+                  <th className="p-3 text-right"><MetricLabel metricKey="fee" align="right" /></th>
+                  <th className="p-3 text-right"><MetricLabel metricKey="manager_years" align="right" /></th>
                 </tr>
               </thead>
               <tbody>
@@ -108,6 +112,7 @@ function ComparePageContent() {
           </div>
           <ChartCard
             title="比较雷达"
+            source={query.data?.meta.source}
             option={{
               radar: { indicator: ["收益", "风险控制", "费用友好", "经理稳定", "风险匹配"].map((name) => ({ name, max: 100 })) },
               series: [{

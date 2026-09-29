@@ -1,13 +1,15 @@
 import csv
+from collections.abc import Sequence
 from datetime import date, datetime
 import json
 import math
 from pathlib import Path
 import sys
-from typing import Any
+from typing import TypedDict
 
 from app.core.config import settings
-from app.schemas.funds import FundDetail, NavPoint
+from app.core.nav_quality import NavQualityWarningPayload, assess_fund_navs
+from app.schemas.funds import FundDetail, FundType, NavPoint, RiskLevel
 
 FUND_FIELDS = {
     "code",
@@ -30,8 +32,33 @@ FUND_FIELDS = {
 
 NAV_FIELDS = {"fund_code", "trade_date", "nav", "accumulated_nav"}
 
+FUND_TYPES_BY_VALUE: dict[str, FundType] = {
+    "stock": "stock",
+    "mixed": "mixed",
+    "bond": "bond",
+    "money": "money",
+}
 
-def preflight_csv_local(data_dir: str | Path | None = None) -> dict[str, Any]:
+RISK_LEVELS_BY_VALUE: dict[str, RiskLevel] = {
+    "R1": "R1",
+    "R2": "R2",
+    "R3": "R3",
+    "R4": "R4",
+    "R5": "R5",
+}
+
+
+class CsvLocalPreflightReport(TypedDict):
+    ok: bool
+    source: str
+    data_dir: str
+    fund_count: int
+    nav_count: int
+    quality_warnings: list[NavQualityWarningPayload]
+    errors: list[str]
+
+
+def preflight_csv_local(data_dir: str | Path | None = None) -> CsvLocalPreflightReport:
     source = CsvLocalFundDataSource(data_dir)
     errors: list[str] = []
     funds: list[FundDetail] = []
@@ -48,8 +75,16 @@ def preflight_csv_local(data_dir: str | Path | None = None) -> dict[str, Any]:
     fund_codes = {fund.code for fund in funds}
     unknown_nav_codes = sorted(set(navs_by_code) - fund_codes)
     if unknown_nav_codes and not any("funds.csv" in error for error in errors):
-        errors.append(f"{source.data_dir / 'navs.csv'}: nav rows reference unknown fund codes: {', '.join(unknown_nav_codes)}")
+        errors.append(
+            f"{source.data_dir / 'navs.csv'}: nav rows reference unknown fund codes: {', '.join(unknown_nav_codes)}"
+        )
     errors = list(dict.fromkeys(errors))
+    quality_warnings = [warning.as_dict() for fund in funds for warning in assess_fund_navs(fund)]
+    if quality_warnings and settings.fund_nav_reject_anomalies:
+        errors.append(
+            "NAV anomaly rejection is enabled and "
+            f"{len(quality_warnings)} value(s) are outside configured thresholds"
+        )
 
     return {
         "ok": not errors,
@@ -57,6 +92,7 @@ def preflight_csv_local(data_dir: str | Path | None = None) -> dict[str, Any]:
         "data_dir": str(source.data_dir),
         "fund_count": len(funds),
         "nav_count": sum(len(navs) for navs in navs_by_code.values()),
+        "quality_warnings": quality_warnings,
         "errors": errors,
     }
 
@@ -66,6 +102,9 @@ class CsvLocalFundDataSource:
 
     def __init__(self, data_dir: str | Path | None = None) -> None:
         self.data_dir = Path(data_dir or settings.fund_csv_dir)
+
+    def fetch_snapshot(self) -> list[FundDetail]:
+        return self._load_funds()
 
     def fetch_fund_profiles(self) -> list[FundDetail]:
         return self._load_funds()
@@ -99,8 +138,8 @@ class CsvLocalFundDataSource:
                     FundDetail(
                         code=code,
                         name=self._required(funds_path, line_number, row, "name"),
-                        fund_type=self._required(funds_path, line_number, row, "fund_type"),  # type: ignore[arg-type]
-                        risk_level=self._required(funds_path, line_number, row, "risk_level"),  # type: ignore[arg-type]
+                        fund_type=self._fund_type(funds_path, line_number, row),
+                        risk_level=self._risk_level(funds_path, line_number, row),
                         manager_name=self._required(funds_path, line_number, row, "manager_name"),
                         inception_date=self._date(funds_path, line_number, row, "inception_date"),
                         fund_size_billion=self._range_float(
@@ -112,18 +151,31 @@ class CsvLocalFundDataSource:
                         custody_fee=self._range_float(
                             funds_path, line_number, row, "custody_fee", minimum=0, maximum=100
                         ),
-                        annualized_return_3y=self._float(funds_path, line_number, row, "annualized_return_3y"),
-                        annualized_return_5y=self._float(funds_path, line_number, row, "annualized_return_5y"),
+                        annualized_return_3y=self._float(
+                            funds_path, line_number, row, "annualized_return_3y"
+                        ),
+                        annualized_return_5y=self._float(
+                            funds_path, line_number, row, "annualized_return_5y"
+                        ),
                         max_drawdown=self._range_float(
                             funds_path, line_number, row, "max_drawdown", minimum=-100, maximum=0
                         ),
                         sharpe_ratio=self._float(funds_path, line_number, row, "sharpe_ratio"),
                         category_rank_percentile=self._range_float(
-                            funds_path, line_number, row, "category_rank_percentile", minimum=0, maximum=100
+                            funds_path,
+                            line_number,
+                            row,
+                            "category_rank_percentile",
+                            minimum=0,
+                            maximum=100,
                         ),
-                        manager_years=self._non_negative_integer(funds_path, line_number, row, "manager_years"),
+                        manager_years=self._non_negative_integer(
+                            funds_path, line_number, row, "manager_years"
+                        ),
                         source="csv_local",
-                        data_updated_at=self._datetime(funds_path, line_number, row, "data_updated_at"),
+                        data_updated_at=self._datetime(
+                            funds_path, line_number, row, "data_updated_at"
+                        ),
                         ai_summary=(row.get("ai_summary") or "").strip(),
                         navs=navs_by_code.get(code, []),
                     )
@@ -154,7 +206,9 @@ class CsvLocalFundDataSource:
                     NavPoint(
                         trade_date=trade_date,
                         nav=self._positive_float(navs_path, line_number, row, "nav"),
-                        accumulated_nav=self._positive_float(navs_path, line_number, row, "accumulated_nav"),
+                        accumulated_nav=self._positive_float(
+                            navs_path, line_number, row, "accumulated_nav"
+                        ),
                     )
                 )
         for navs in navs_by_code.values():
@@ -162,7 +216,11 @@ class CsvLocalFundDataSource:
         return navs_by_code
 
     @staticmethod
-    def _validate_headers(path: Path, fieldnames: list[str] | None, required_fields: set[str]) -> None:
+    def _validate_headers(
+        path: Path,
+        fieldnames: Sequence[str] | None,
+        required_fields: set[str],
+    ) -> None:
         actual_fields = set(fieldnames or [])
         missing = sorted(required_fields - actual_fields)
         if missing:
@@ -176,12 +234,46 @@ class CsvLocalFundDataSource:
         return value.strip()
 
     @classmethod
+    def _fund_type(
+        cls,
+        path: Path,
+        line_number: int,
+        row: dict[str, str | None],
+    ) -> FundType:
+        value = cls._required(path, line_number, row, "fund_type")
+        try:
+            return FUND_TYPES_BY_VALUE[value]
+        except KeyError as exc:
+            supported = ", ".join(FUND_TYPES_BY_VALUE)
+            raise ValueError(
+                f"{path}:{line_number}: unsupported fund_type={value}; expected one of {supported}"
+            ) from exc
+
+    @classmethod
+    def _risk_level(
+        cls,
+        path: Path,
+        line_number: int,
+        row: dict[str, str | None],
+    ) -> RiskLevel:
+        value = cls._required(path, line_number, row, "risk_level")
+        try:
+            return RISK_LEVELS_BY_VALUE[value]
+        except KeyError as exc:
+            supported = ", ".join(RISK_LEVELS_BY_VALUE)
+            raise ValueError(
+                f"{path}:{line_number}: unsupported risk_level={value}; expected one of {supported}"
+            ) from exc
+
+    @classmethod
     def _float(cls, path: Path, line_number: int, row: dict[str, str | None], key: str) -> float:
         value = cls._required(path, line_number, row, key)
         try:
             parsed = float(value)
         except ValueError as exc:
-            raise ValueError(f"{path}:{line_number}: invalid numeric CSV field {key}={value}") from exc
+            raise ValueError(
+                f"{path}:{line_number}: invalid numeric CSV field {key}={value}"
+            ) from exc
         if not math.isfinite(parsed):
             raise ValueError(f"{path}:{line_number}: non-finite numeric CSV field {key}={value}")
         return parsed
@@ -200,21 +292,31 @@ class CsvLocalFundDataSource:
         value = cls._float(path, line_number, row, key)
         if value < minimum or (maximum is not None and value > maximum):
             expected = f">= {minimum}" if maximum is None else f"between {minimum} and {maximum}"
-            raise ValueError(f"{path}:{line_number}: numeric CSV field {key} must be {expected}; got {value}")
+            raise ValueError(
+                f"{path}:{line_number}: numeric CSV field {key} must be {expected}; got {value}"
+            )
         return value
 
     @classmethod
-    def _positive_float(cls, path: Path, line_number: int, row: dict[str, str | None], key: str) -> float:
+    def _positive_float(
+        cls, path: Path, line_number: int, row: dict[str, str | None], key: str
+    ) -> float:
         value = cls._float(path, line_number, row, key)
         if value <= 0:
-            raise ValueError(f"{path}:{line_number}: numeric CSV field {key} must be > 0; got {value}")
+            raise ValueError(
+                f"{path}:{line_number}: numeric CSV field {key} must be > 0; got {value}"
+            )
         return value
 
     @classmethod
-    def _non_negative_integer(cls, path: Path, line_number: int, row: dict[str, str | None], key: str) -> int:
+    def _non_negative_integer(
+        cls, path: Path, line_number: int, row: dict[str, str | None], key: str
+    ) -> int:
         value = cls._float(path, line_number, row, key)
         if value < 0 or not value.is_integer():
-            raise ValueError(f"{path}:{line_number}: numeric CSV field {key} must be a non-negative integer; got {value}")
+            raise ValueError(
+                f"{path}:{line_number}: numeric CSV field {key} must be a non-negative integer; got {value}"
+            )
         return int(value)
 
     @classmethod
@@ -232,9 +334,13 @@ class CsvLocalFundDataSource:
         try:
             parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError as exc:
-            raise ValueError(f"{path}:{line_number}: invalid ISO datetime field {key}={value}") from exc
+            raise ValueError(
+                f"{path}:{line_number}: invalid ISO datetime field {key}={value}"
+            ) from exc
         if parsed.tzinfo is None or parsed.utcoffset() is None:
-            raise ValueError(f"{path}:{line_number}: ISO datetime field {key} must include a timezone offset; got {value}")
+            raise ValueError(
+                f"{path}:{line_number}: ISO datetime field {key} must include a timezone offset; got {value}"
+            )
         return value
 
 

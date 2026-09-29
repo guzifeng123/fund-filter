@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "ok": false,
+  "manifest_ok": true,
+  "alerts_ok": false,
+  "fail_on_alerts": true,
+  "what_if": false,
+  "started_at": "2026-07-12T00:00:00.0000000Z",
+  "finished_at": "2026-07-12T00:00:01.0000000Z",
+  "duration_ms": 1000,
+  "workspace_root": "C:\\Users\\39187\\Desktop\\基金",
+  "git_commit": "0000000000000000000000000000000000000000",
+  "output_directory": "output/release-artifacts/example-run",
+  "profile": "local-release",
+  "source_paths": [
+    "output/checks",
+    "output/smoke"
+  ],
+  "skipped_sources": [
+    "C:\\Users\\39187\\Desktop\\基金\\output\\playwright"
+  ],
+  "required_artifacts": [
+    "output/checks/report-contracts-summary.json"
+  ],
+  "missing_required_artifacts": [],
+  "alerts_schema_version": 1,
+  "alert_count": 1,
+  "alerts": [
+    {
+      "type": "failed_artifact_report",
+      "severity": "error",
+      "message": "Failed artifact report: output/checks/report-contracts-summary.json",
+      "source": "output/checks/report-contracts-summary.json",
+      "destination": "output/release-artifacts/example-run/output/checks/report-contracts-summary.json"
+    }
+  ],
+  "artifact_count": 1,
+  "artifacts": [
+    {
+      "source": "output\\checks\\report-contracts-summary.json",
+      "destination": "output\\release-artifacts\\example-run\\output\\checks\\report-contracts-summary.json",
+      "size_bytes": 1024,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ]
+}

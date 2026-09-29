@@ -1,0 +1,88 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://fund-analysis.local/contracts/visual-check-report.schema.json",
+  "title": "Mobile visual check report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "ok", "viewport", "failures", "chartFailures", "results"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "ok": { "type": "boolean" },
+    "viewport": { "$ref": "#/definitions/viewport" },
+    "failures": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "chartFailures": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "results": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/page_result" },
+      "minItems": 1
+    }
+  },
+  "definitions": {
+    "viewport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "page_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "path",
+        "viewportWidth",
+        "bodyScrollWidth",
+        "documentScrollWidth",
+        "overflowingElements",
+        "canvases"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "viewportWidth": { "type": "integer", "minimum": 1 },
+        "bodyScrollWidth": { "type": "integer", "minimum": 1 },
+        "documentScrollWidth": { "type": "integer", "minimum": 1 },
+        "overflowingElements": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/overflowing_element" }
+        },
+        "canvases": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/canvas" }
+        }
+      }
+    },
+    "overflowing_element": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tag", "className", "clientWidth", "scrollWidth", "text"],
+      "properties": {
+        "tag": { "type": "string", "minLength": 1 },
+        "className": { "type": "string" },
+        "clientWidth": { "type": "integer", "minimum": 0 },
+        "scrollWidth": { "type": "integer", "minimum": 0 },
+        "text": { "type": "string" }
+      }
+    },
+    "canvas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "clientWidth", "clientHeight"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 0 },
+        "height": { "type": "integer", "minimum": 0 },
+        "clientWidth": { "type": "integer", "minimum": 0 },
+        "clientHeight": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

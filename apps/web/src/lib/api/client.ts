@@ -4,6 +4,7 @@ import type {
   BacktestRequest,
   BacktestResult,
   ChatResponse,
+  DashboardData,
   DataStatus,
   DataSyncResult,
   Fund,
@@ -17,7 +18,9 @@ import type {
   RebalancePreview,
   RiskAnswer,
   RiskAssessmentResult,
-  RiskQuestion
+  RiskQuestion,
+  RuntimeSettingsData,
+  SchedulerStatus
 } from "@/lib/api/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000/api";
@@ -75,7 +78,7 @@ async function parseApiError(response: Response): Promise<ApiClientError> {
     },
     meta: {
       source: "api",
-      data_updated_at: "",
+      data_updated_at: null,
       disclaimer: ""
     }
   });
@@ -98,14 +101,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResponse
 }
 
 export const apiClient = {
-  dashboard: () =>
-    request<{
-      risk_profile: string;
-      health: string;
-      watchlist_updated_at: string;
-      alerts: string[];
-    }>("/dashboard"),
+  dashboard: () => request<DashboardData>("/dashboard"),
+  runtimeSettings: () => request<RuntimeSettingsData>("/settings/runtime"),
   dataStatus: () => request<DataStatus>("/data/status"),
+  schedulerStatus: () => request<SchedulerStatus>("/data/scheduler/status"),
   recentDataJobs: (limit = 10) => request<JobRunSummary[]>(`/data/jobs/recent?limit=${limit}`),
   syncData: (task: DataSyncResult["task"] = "all") =>
     request<DataSyncResult>(`/data/sync?task=${task}`, { method: "POST" }),
@@ -117,7 +116,7 @@ export const apiClient = {
       body: JSON.stringify({ answers })
     }),
   searchFunds: (query: string, params: Omit<FundSearchParams, "q"> = {}) =>
-    request<Fund[]>(`/funds/search${buildQuery({ ...params, q: query })}`),
+    request<Fund[]>(`/funds/search${buildQuery({ ...params, q: query.trim() })}`),
   filterFunds: (payload: FundFilterRequest) =>
     request<Fund[]>("/funds/filter", {
       method: "POST",
@@ -150,6 +149,8 @@ export const apiClient = {
     }),
   removePortfolioPosition: (portfolioId: string, fundCode: string) =>
     request<PortfolioDetail>(`/portfolios/${portfolioId}/positions/${fundCode}`, { method: "DELETE" }),
+  normalizePortfolioPositions: (portfolioId: string) =>
+    request<PortfolioDetail>(`/portfolios/${portfolioId}/positions/normalize`, { method: "POST" }),
   rebalancePreview: (portfolioId: string) =>
     request<RebalancePreview>(`/portfolios/${portfolioId}/rebalance-preview`, { method: "POST" }),
   runBacktest: (payload: BacktestRequest) =>
@@ -185,6 +186,7 @@ export const apiClient = {
     const decoder = new TextDecoder();
     let buffer = "";
     let finalResponse: ChatResponse | null = null;
+    let finalMeta: ApiResponse<ChatResponse>["meta"] | null = null;
     while (reader) {
       const { value, done } = await reader.read();
       if (done) break;
@@ -194,14 +196,22 @@ export const apiClient = {
       for (const event of events) {
         const line = event.split("\n").find((item) => item.startsWith("data: "));
         if (!line) continue;
-        const payload = JSON.parse(line.slice(6)) as { chunk?: string; done?: boolean; response?: ChatResponse };
+        const payload = JSON.parse(line.slice(6)) as {
+          chunk?: string;
+          done?: boolean;
+          response?: ChatResponse;
+          meta?: ApiResponse<ChatResponse>["meta"];
+        };
         if (payload.chunk) onChunk(payload.chunk);
-        if (payload.done && payload.response) finalResponse = payload.response;
+        if (payload.done && payload.response) {
+          finalResponse = payload.response;
+          finalMeta = payload.meta ?? null;
+        }
       }
     }
-    if (!finalResponse) {
-      throw new Error("AI 流式响应未返回完整结果");
+    if (!finalResponse || !finalMeta) {
+      throw new Error("AI 流式响应未返回完整结果和来源元数据");
     }
-    return finalResponse;
+    return { data: finalResponse, meta: finalMeta };
   }
 };

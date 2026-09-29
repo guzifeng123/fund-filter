@@ -1,6 +1,8 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.core.nav_dates import normalize_nav_trade_date
 
 RiskLevel = Literal["R1", "R2", "R3", "R4", "R5"]
 RiskProfile = Literal["C1", "C2", "C3", "C4", "C5"]
@@ -18,9 +20,24 @@ SortOrder = Literal["asc", "desc"]
 
 
 class NavPoint(BaseModel):
-    trade_date: str
-    nav: float
-    accumulated_nav: float
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    trade_date: str = Field(
+        pattern=r"^(?:[0-9]{4}|[0-9]{4}-[0-9]{2}-[0-9]{2})$",
+        description=(
+            "Canonical YYYY-MM-DD for real NAVs; YYYY is reserved for legacy sample points."
+        ),
+    )
+    nav: float = Field(gt=0)
+    accumulated_nav: float = Field(gt=0)
+
+    @field_validator("trade_date", mode="before")
+    @classmethod
+    def normalize_trade_date(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise ValueError("trade_date must be a string")
+        normalized, _ = normalize_nav_trade_date(value)
+        return normalized
 
 
 class FeeSummary(BaseModel):
@@ -68,7 +85,10 @@ class Fund(BaseModel):
     category_rank_percentile: float
     manager_years: int
     source: str
+    provider_profile: str | None = None
+    upstream_provider: str | None = None
     data_updated_at: str
+    snapshot_generation_id: str | None = None
 
 
 class FundDetail(Fund):
@@ -81,12 +101,25 @@ class FundDetail(Fund):
 
 
 class FundFilterRequest(BaseModel):
+    keyword: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Optional fund code/name keyword applied together with every filter criterion.",
+    )
     risk_profile: RiskProfile
     fund_types: list[FundType]
-    min_years: int = Field(ge=0)
+    min_years: int = Field(
+        ge=0,
+        description="Minimum completed years since the fund inception_date.",
+    )
     size_range: tuple[float, float]
     return_rank_percentile: float = Field(ge=0, le=100)
-    max_drawdown_lte_category_avg: bool
+    max_drawdown_lte_category_avg: bool = Field(
+        description=(
+            "When true, keep funds whose signed max_drawdown is greater than or equal to "
+            "the average for the same fund_type (a smaller loss magnitude)."
+        )
+    )
     sharpe_gte: float
     fee_lte: float
     sort_by: FundSortBy = "annualized_return_3y"
@@ -94,4 +127,4 @@ class FundFilterRequest(BaseModel):
 
 
 class FundCompareRequest(BaseModel):
-    codes: list[str] = Field(min_length=1, max_length=5)
+    codes: list[str] = Field(min_length=2, max_length=5)

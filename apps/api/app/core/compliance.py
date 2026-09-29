@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 COMPLIANCE_DISCLAIMER = "本工具基于历史数据，仅供分析学习，不构成投资建议。历史表现不预示未来收益。"
@@ -14,9 +14,9 @@ RISK_PROFILE_LIMITS: dict[str, list[str]] = {
 }
 
 
-def _format_data_updated_at(data_updated_at: datetime | str | None) -> str:
+def _format_data_updated_at(data_updated_at: datetime | str | None) -> str | None:
     if data_updated_at is None:
-        return datetime.now(timezone.utc).astimezone().isoformat()
+        return None
     if isinstance(data_updated_at, datetime):
         return data_updated_at.isoformat()
     return data_updated_at

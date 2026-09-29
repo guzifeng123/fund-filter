@@ -1,22 +1,33 @@
+from collections.abc import Callable
+from typing import cast
+
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql, sqlite
+from sqlalchemy.engine import Dialect
+from sqlalchemy.schema import CreateColumn
 
 from app.db.vector import VectorList
 
+postgresql_dialect = cast(Callable[[], Dialect], postgresql.dialect)
+
 
 def test_vector_list_compiles_to_pgvector_for_postgresql() -> None:
-    column = sa.Column("embedding", VectorList(16), nullable=False)
+    column: sa.Column[list[float]] = sa.Column(
+        "embedding", VectorList(16), nullable=False
+    )
 
-    ddl = str(sa.schema.CreateColumn(column).compile(dialect=postgresql.dialect()))
+    ddl = str(CreateColumn(column).compile(dialect=postgresql_dialect()))
 
     assert "embedding vector(16)" in ddl
 
 
 def test_vector_list_uses_json_storage_for_sqlite() -> None:
-    column = sa.Column("embedding", VectorList(16), nullable=False)
+    column: sa.Column[list[float]] = sa.Column(
+        "embedding", VectorList(16), nullable=False
+    )
 
-    ddl = str(sa.schema.CreateColumn(column).compile(dialect=sqlite.dialect()))
+    ddl = str(CreateColumn(column).compile(dialect=sqlite.dialect()))
 
     assert "embedding JSON" in ddl
 

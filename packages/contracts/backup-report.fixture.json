@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "started_at": "2026-07-12T00:00:00.0000000Z",
+  "finished_at": "2026-07-12T00:00:01.0000000Z",
+  "duration_ms": 1000,
+  "database": "fund_app",
+  "service": "postgres",
+  "user": "fund_user",
+  "compressed": true,
+  "backup_path": "C:\\Users\\39187\\Desktop\\基金\\backups\\fund_app-20260712-000000.sql.gz",
+  "backup_file": "fund_app-20260712-000000.sql.gz",
+  "backup_size_bytes": 128,
+  "checksum_path": "C:\\Users\\39187\\Desktop\\基金\\backups\\fund_app-20260712-000000.sql.gz.sha256",
+  "retention_count": 2,
+  "removed_items": [
+    "C:\\Users\\39187\\Desktop\\基金\\backups\\fund_app-20260711-000000.sql.gz",
+    "C:\\Users\\39187\\Desktop\\基金\\backups\\fund_app-20260711-000000.sql.gz.sha256"
+  ],
+  "skip_dump_for_retention_test": true
+}
