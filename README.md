@@ -60,6 +60,25 @@ python -m pip install -e .\apps\api[dev]
 .\scripts\check-env.ps1 -RunSmoke
 ```
 
+### Linux/macOS 用法（make）
+
+Windows 继续使用上面的 `scripts/*.ps1` 入口；Linux/macOS 上仓库根提供等价的 `Makefile`，统一通过仓库根 `.venv` 调用，无需手动激活虚拟环境：
+
+```bash
+make install        # npm install + 把 apps/api[dev] 装进 .venv
+make migrate        # alembic upgrade head（在 apps/api 下执行）
+make seed           # 幂等写入 sample 基金数据
+make test           # 后端 pytest 套件
+make lint           # ruff check（锁定 0.14.9）
+make mypy           # mypy --strict
+make connectivity   # AKShare 上游连通性烟雾测试
+make sync-eastmoney # 把 EastMoney 审计快照拉进本地 SQLite
+make smoke          # 对本地 :8000 API 跑 /health 与 /api/data/status
+make dev-api        # 启动 FastAPI 开发服务器
+```
+
+如需自定义 Python 解释器路径，可覆盖 `PYTHON` 变量，例如 `make test PYTHON=/path/to/bin/python`。
+
 ## 数据库初始化
 
 启动 PostgreSQL：

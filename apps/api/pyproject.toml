@@ -20,7 +20,7 @@ dev = [
   "mypy>=1.19.1",
   "pytest>=9.0.2",
   "pyyaml>=6.0.3",
-  "ruff>=0.14.9"
+  "ruff==0.14.9"
 ]
 
 [tool.ruff]
