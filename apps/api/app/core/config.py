@@ -310,6 +310,22 @@ def _parse_proxy_urls(raw_proxy_urls: str) -> tuple[str, ...]:
     return tuple(proxy_urls)
 
 
+def _parse_eastmoney_fund_codes(raw_codes: str) -> tuple[str, ...]:
+    """Split the explicit Eastmoney fund-code list without validating digit shape.
+
+    Digit-shape and empty-config fail-fast live in the eastmoney_direct adapter so
+    that the default sample_local boot path is never affected by this optional block.
+    """
+    codes: list[str] = []
+    for raw_code in raw_codes.split(","):
+        code = raw_code.strip()
+        if not code:
+            continue
+        if code not in codes:
+            codes.append(code)
+    return tuple(codes)
+
+
 class Settings:
     def __init__(self) -> None:
         self.app_environment = os.getenv("APP_ENVIRONMENT", "development").strip().lower()
@@ -580,6 +596,39 @@ class Settings:
             "FUND_ARCHIVE_KEEP_GENERATIONS",
             "0",
             maximum=10_000,
+        )
+
+        # --- Eastmoney direct online adapter (FUND_EASTMONEY_*) ---------------
+        # Online low-frequency pull from public Eastmoney pages. This block is only
+        # consumed when FUND_DATA_SOURCE=eastmoney_direct; default sources are
+        # unchanged. Codes are never discovered across the whole market unless
+        # FUND_EASTMONEY_DISCOVERY_LIMIT > 0, and an empty explicit list with
+        # discovery disabled fails fast inside the adapter.
+        self.fund_eastmoney_fund_codes = _parse_eastmoney_fund_codes(
+            os.getenv("FUND_EASTMONEY_FUND_CODES", "")
+        )
+        self.fund_eastmoney_timeout_seconds = _positive_integer(
+            "FUND_EASTMONEY_TIMEOUT_SECONDS",
+            "15",
+            maximum=120,
+        )
+        self.fund_eastmoney_min_interval_seconds = max(
+            0.0,
+            float(os.getenv("FUND_EASTMONEY_MIN_INTERVAL_SECONDS", "0.5")),
+        )
+        self.fund_eastmoney_cache_dir = os.getenv("FUND_EASTMONEY_CACHE_DIR", "").strip()
+        self.fund_eastmoney_enable_incremental = _strict_boolean(
+            "FUND_EASTMONEY_ENABLE_INCREMENTAL",
+            "true",
+        )
+        self.fund_eastmoney_discovery_limit = _non_negative_integer(
+            "FUND_EASTMONEY_DISCOVERY_LIMIT",
+            "0",
+            maximum=500,
+        )
+        self.fund_eastmoney_health_enabled = _strict_boolean(
+            "FUND_EASTMONEY_ENABLE_HEALTH_CHECK",
+            "true",
         )
 
 

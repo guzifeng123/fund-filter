@@ -266,7 +266,13 @@ class EastmoneySnapshotBuilder:
         snapshot_time = generated_at or datetime.now(timezone.utc)
         return [build_fund_snapshot(self.fetch_raw(code, snapshot_time.date()), snapshot_time) for code in fund_codes]
 
-    def fetch_raw(self, code: str, as_of: date) -> EastmoneyRawSnapshot:
+    def fetch_raw(
+        self,
+        code: str,
+        as_of: date,
+        *,
+        start_date: date | None = None,
+    ) -> EastmoneyRawSnapshot:
         normalized_code = code.strip()
         if not re.fullmatch(r"\d{6}", normalized_code):
             raise ValueError(f"fund code must contain exactly six digits: {code}")
@@ -283,8 +289,13 @@ class EastmoneySnapshotBuilder:
         base_info = base_payload.get("Datas")
         if not isinstance(base_info, dict):
             raise ValueError("eastmoney base information response is missing Datas")
-        start_date = as_of - timedelta(days=5 * 366 + 45)
-        nav_rows = self._read_all_navs(normalized_code, start_date, as_of)
+        # Default window keeps the historical 5-year+ lookback used by scripts and
+        # existing tests; callers (for example the incremental eastmoney_direct
+        # adapter) may pass a later start_date to only fetch newly published pages.
+        effective_start = (
+            start_date if start_date is not None else as_of - timedelta(days=5 * 366 + 45)
+        )
+        nav_rows = self._read_all_navs(normalized_code, effective_start, as_of)
         return EastmoneyRawSnapshot(
             base_info=base_info,
             nav_rows=nav_rows,
