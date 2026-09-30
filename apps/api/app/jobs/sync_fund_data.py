@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
+import logging
 from uuid import uuid4
 
 from sqlalchemy import update
@@ -10,6 +11,9 @@ from app.core.config import settings
 from app.core.nav_quality import NavQualityWarningPayload
 from app.core.nav_series_quality import assess_nav_series_quality
 from app.core.profile_quality import assess_profile_quality
+from app.core.reconciliation_service import (
+    ReconciliationService,
+)
 from app.core.snapshot_quality import (
     SnapshotQualityError,
     SnapshotQualityThresholds,
@@ -43,6 +47,8 @@ from app.schemas.funds import FundDetail
 
 NAV_WARNING_DETAIL_LIMIT = 100
 ATOMIC_PROMOTION_BOUNDARY = "atomic_promotion"
+
+logger = logging.getLogger(__name__)
 
 
 class JobAlreadyRunningError(RuntimeError):
@@ -81,6 +87,65 @@ def _validate_complete_snapshot(funds: list[FundDetail]) -> None:
             "fund data source returned duplicate fund codes: "
             + ", ".join(sorted(duplicate_codes))
         )
+
+
+def _build_reconciliation_service(source: FundDataSource) -> ReconciliationService | None:
+    """Assemble the cross-check gate for the current primary source, if enabled.
+
+    Returns ``None`` when reconciliation is disabled or the source is not in the
+    allow-list (offline mirrors sample_local / csv_local / public_http_json keep
+    their existing behaviour unchanged). The C2 secondary clients are imported
+    lazily here so this module -- and the read-only API -- never imports the
+    network layer at import time; tests monkeypatch this builder to inject fakes.
+    """
+    if not settings.fund_reconcile_enabled:
+        return None
+    if source.name not in settings.fund_reconcile_apply_to_sources:
+        return None
+    # Function-local lazy import: C2 lives in app.data_sources.secondary and is
+    # not required when the gate is off or the source is not reconciled. Loaded
+    # via importlib so this branch (which does not yet vendor C2) type-checks
+    # under --strict; at integration the real modules resolve at runtime.
+    import importlib
+
+    try:
+        danjuan_module = importlib.import_module("app.data_sources.secondary.danjuan")
+        sina_module = importlib.import_module("app.data_sources.secondary.sina")
+        danjuan_cls = getattr(danjuan_module, "DanjuanSource")
+        sina_cls = getattr(sina_module, "SinaSource")
+        danjuan = danjuan_cls(
+            timeout_seconds=settings.fund_reconcile_secondary_timeout_seconds,
+            min_interval_seconds=settings.fund_reconcile_secondary_min_interval_seconds,
+        )
+        sina = sina_cls(
+            timeout_seconds=settings.fund_reconcile_secondary_timeout_seconds,
+            min_interval_seconds=settings.fund_reconcile_secondary_min_interval_seconds,
+            batch=settings.fund_reconcile_sina_batch,
+        )
+    except Exception as exc:  # C2 not vendored in this branch / assembly error
+        # Without secondary clients the gate cannot cross-check; degrade to a
+        # skip rather than fail an offline source run. Per-fund network outages
+        # are still handled fail-closed inside ReconciliationService.
+        logger.warning("reconciliation secondary clients unavailable; gate skipped: %s", exc)
+        return None
+    return ReconciliationService(source, danjuan, sina, settings)
+
+
+def _maybe_run_reconciliation_gate(
+    funds: list[FundDetail],
+    source: FundDataSource,
+) -> JsonObject | None:
+    """Run the pre-staging cross-check gate; returns the compact details envelope.
+
+    Raises :class:`ReconciliationError` in strict mode so the atomic transaction
+    rolls back and the previous generation stays visible.
+    """
+    service = _build_reconciliation_service(source)
+    if service is None:
+        return None
+    summary = service.reconcile_snapshot(funds)
+    return service.summary_to_details(summary, report_path=service.last_report_path)
+
 
 
 def _thresholds_json(thresholds: SnapshotQualityThresholds) -> JsonObject:
@@ -146,6 +211,10 @@ def _run_atomic_snapshot_job(
     def task() -> JsonObject:
         funds = source.fetch_snapshot()
         _validate_complete_snapshot(funds)
+        # C3: multi-source cross-check gate, at the same pre-staging layer as the
+        # structural quality gates above. Strict rejection rolls the whole
+        # transaction back; offline mirror sources are skipped by the allow-list.
+        reconciliation_details = _maybe_run_reconciliation_gate(funds, source)
         generation_id = _new_snapshot_generation_id()
         state = lock_snapshot_state(db)
         previous_generation_id = state.active_generation_id
@@ -232,6 +301,8 @@ def _run_atomic_snapshot_job(
             append_archive_details(details, archive_result)
         elif archive_warning is not None:
             details["archive_warning"] = archive_warning
+        if reconciliation_details is not None:
+            details["reconciliation"] = reconciliation_details
         quality_warning_payloads = [*pre_stage_warnings, *quality_warnings]
         if quality_warning_payloads:
             details.update(
