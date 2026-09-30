@@ -34,7 +34,7 @@ import inspect
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 import logging
-from typing import Protocol
+from typing import Protocol, cast
 from uuid import uuid4
 
 from sqlalchemy import func, select
@@ -90,6 +90,24 @@ class PrimaryFundFetcher(Protocol):
         than it, merging against its local history cache.
         """
         ...
+
+
+class _ShardAwareClaim(Protocol):
+    """The D1 claim_batch signature (added later on the integration branch).
+
+    Casting to this lets the shard-forwarding branch type-check against the D1
+    kwargs while remaining legal on the current 3-arg signature, where the
+    branch is never taken at runtime.
+    """
+
+    def __call__(
+        self,
+        batch_size: int,
+        worker_id: str,
+        *,
+        shards: int | None = ...,
+        shard: int | None = ...,
+    ) -> list[str]: ...
 
 
 # --------------------------------------------------------------------------- #
@@ -199,11 +217,13 @@ class BatchRunner:
     # ------------------------------------------------------------------ claim
     def _claim(self, batch_size: int) -> list[str]:
         # D1 forward-compat: forward shards/shard only once claim_batch accepts
-        # them; until then the runtime check above has already logged a hint.
-        kwargs: dict[str, object] = {}
+        # them. The runtime inspect check above selects the branch; the cast lets
+        # mypy check the shard-aware call against the D1 signature while still
+        # passing on the current 3-arg signature (no **object dict expansion).
         if self._claim_supports_shards:
-            kwargs = {"shards": self._shards, "shard": self._shard}
-        return list(self._state.claim_batch(batch_size, self._worker_id, **kwargs))
+            claim = cast("_ShardAwareClaim", self._state.claim_batch)
+            return list(claim(batch_size, self._worker_id, shards=self._shards, shard=self._shard))
+        return list(self._state.claim_batch(batch_size, self._worker_id))
 
     # ------------------------------------------------------------ per-fund DB
     def _latest_nav_trade_date(self, code: str) -> date | None:
