@@ -32,6 +32,10 @@ def _to_fund_view(raw: dict[str, Any]) -> FundReconciliationView:
             float(raw["nav_agreement"]) if raw.get("nav_agreement") is not None else None
         ),
         critical_failures=int(raw.get("critical_failures", 0)),
+        critical_failure_details=[
+            str(item) for item in raw.get("critical_failure_details", [])
+        ],
+        nav_mismatch_points=[str(item) for item in raw.get("nav_mismatch_points", [])],
         warnings=int(raw.get("warnings", 0)),
         field_diffs=[item for item in raw.get("field_diffs", []) if isinstance(item, dict)],
         source_values=dict(raw.get("source_values", {}) or {}),

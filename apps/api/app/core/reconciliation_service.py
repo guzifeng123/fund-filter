@@ -416,6 +416,8 @@ class ReconciliationService:
                     "nav_coverage": round(report.nav_coverage, 6),
                     "nav_agreement": round(report.nav_agreement, 6),
                     "critical_failures": len(report.critical_failures),
+                    "critical_failure_details": list(report.critical_failures),
+                    "nav_mismatch_points": list(report.nav_mismatch_points),
                     "warnings": len(report.warnings),
                     "field_diffs": [
                         {
@@ -486,6 +488,7 @@ class ReconciliationService:
                         "nav_coverage": r.nav_coverage,
                         "nav_agreement": r.nav_agreement,
                         "critical_failures": list(r.critical_failures),
+                        "nav_mismatch_points": list(r.nav_mismatch_points),
                         "warnings": list(r.warnings),
                         "field_checks": [
                             {

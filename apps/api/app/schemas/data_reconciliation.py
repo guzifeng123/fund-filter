@@ -35,6 +35,8 @@ class FundReconciliationView(BaseModel):
     nav_coverage: float | None = None
     nav_agreement: float | None = None
     critical_failures: int = 0
+    critical_failure_details: list[str] = []
+    nav_mismatch_points: list[str] = []
     warnings: int = 0
     field_diffs: list[dict[str, Any]] = []
     source_values: dict[str, Any] = {}

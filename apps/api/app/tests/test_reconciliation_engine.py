@@ -265,6 +265,12 @@ def test_single_unit_nav_over_tolerance_is_mismatch() -> None:
     report = reconcile_fund(primary, secondary, ReconcileConfig())
     assert report.nav_mismatch == 1
     assert report.status == "mismatch"
+    # The disagreeing point must be an explicit, dated critical failure with the
+    # two source values, not just an aggregate agreement dip.
+    assert any(cf.startswith("nav_unit_mismatch: 1 ") for cf in report.critical_failures)
+    assert len(report.nav_mismatch_points) == 1
+    assert report.nav_mismatch_points[0].startswith("2026-01-06 unit_nav")
+    assert "1.05" in report.nav_mismatch_points[0]
 
 
 def test_low_nav_coverage_is_mismatch() -> None:
@@ -284,6 +290,9 @@ def test_low_nav_coverage_is_mismatch() -> None:
     assert report.nav_total == 10
     assert report.nav_coverage == pytest.approx(0.1)
     assert report.status == "mismatch"
+    assert any(
+        cf.startswith("nav_coverage_below_threshold:") for cf in report.critical_failures
+    )
 
 
 def test_found_date_mismatch_is_critical() -> None:

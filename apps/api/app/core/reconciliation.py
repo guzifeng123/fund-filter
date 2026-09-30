@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Literal
 
@@ -156,6 +156,10 @@ class FundReconciliationReport:
     nav_agreement: float
     critical_failures: list[str]
     warnings: list[str]
+    # Human-readable, capped list of unit-NAV points that disagree across
+    # sources (date + each source's value). Surfaced in the on-disk report and
+    # (via the first entry) in critical_failures so a rejection is auditable.
+    nav_mismatch_points: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -865,7 +869,20 @@ def reconcile_fund(
             sources.append(snap.source)
 
     nav_checks, stats = reconcile_navs(primary, secondary, cfg)
-    del nav_checks  # per-point checks are surfaced via C3 if needed
+    # Keep a capped, human-readable list of dated unit-NAV disagreements (both
+    # sources present on the date but values differ beyond tolerance); these are
+    # the hardest data-accuracy signals and must be visible when the gate blocks.
+    nav_mismatch_points = [
+        "{} unit_nav {}".format(
+            check.date.isoformat(),
+            " vs ".join(
+                f"{src}={'None' if val is None else val}"
+                for src, val in sorted(check.values.items())
+            ),
+        )
+        for check in nav_checks
+        if not check.unit_match and not check.missing_sources
+    ][:10]
     field_checks = reconcile_profile(primary, secondary, cfg)
 
     critical_failures: list[str] = []
@@ -913,6 +930,7 @@ def reconcile_fund(
         nav_agreement=stats.agreement,
         critical_failures=list(critical_failures),
         warnings=list(warnings),
+        nav_mismatch_points=nav_mismatch_points,
     )
     return adjudicate(report, cfg)
 
@@ -964,6 +982,7 @@ def adjudicate(
         if fc.rule.endswith("_skipped") and fc.severity == "critical"
     ]
 
+    nav_blockers: list[str] = []
     if source_unavailable:
         status: Literal["verified", "mismatch", "unverified", "source_unavailable"] = (
             "source_unavailable"
@@ -972,8 +991,22 @@ def adjudicate(
         hard = bool(hard_critical)
         if report.nav_coverage < cfg.min_nav_coverage:
             hard = True
+            nav_blockers.append(
+                f"nav_coverage_below_threshold: {report.nav_coverage:.4f} < "
+                f"{cfg.min_nav_coverage:.4f} "
+                f"({report.nav_matched}/{report.nav_total} dated points matched)"
+            )
         if report.nav_mismatch > 0:
             hard = True
+            sample = (
+                f"; first: {report.nav_mismatch_points[0]}"
+                if report.nav_mismatch_points
+                else ""
+            )
+            nav_blockers.append(
+                f"nav_unit_mismatch: {report.nav_mismatch} unit-NAV point(s) "
+                f"disagree beyond tolerance{sample}"
+            )
         if cfg.profile_major_blocks and major_fails:
             hard = True
         if cfg.scale_blocks and scale_fails:
@@ -994,6 +1027,12 @@ def adjudicate(
         else:
             status = "verified"
 
+    effective_critical = (
+        list(report.critical_failures)
+        if source_unavailable
+        else [*report.critical_failures, *nav_blockers]
+    )
+
     return FundReconciliationReport(
         code=report.code,
         display_name=report.display_name,
@@ -1006,8 +1045,9 @@ def adjudicate(
         nav_mismatch=report.nav_mismatch,
         nav_coverage=report.nav_coverage,
         nav_agreement=report.nav_agreement,
-        critical_failures=list(report.critical_failures),
+        critical_failures=effective_critical,
         warnings=warnings,
+        nav_mismatch_points=list(report.nav_mismatch_points),
     )
 
 
