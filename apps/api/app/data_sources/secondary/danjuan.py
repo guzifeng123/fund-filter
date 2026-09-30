@@ -34,10 +34,18 @@ PROBE_CODE = "000001"
 RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 # Conservatively few retries: one extra attempt per transient status class.
 MAX_RETRIES = 2
-DEFAULT_NAV_PAGE_SIZE = 20
-# Hard safety cap so an unbounded historical pull can never runaway when no
-# ``since`` bound is supplied (the incremental path normally supplies ``since``).
-DEFAULT_MAX_NAV_PAGES = 20
+# Large pages keep the secondary pull cheap while still covering the primary's
+# multi-year NAV window: the online Eastmoney builder fetches roughly 5 years
+# (~1.25k trading points). danjuanfunds accepts size=500, which reaches a 5y
+# window in about 3 pages instead of 60+ small requests.
+DEFAULT_NAV_PAGE_SIZE = 500
+# Hard safety cap so an unbounded historical pull can never run away when no
+# ``since`` bound is supplied (the gate always passes ``since`` = the earliest
+# primary NAV date, so a normal ~5y check stops after ~3 pages). 8 x 500 = 4000
+# points (~16 trading years) is a generous ceiling; a fund older than that with
+# no ``since`` is intentionally left for the engine's coverage gate to reject
+# rather than triggering an unbounded crawl.
+DEFAULT_MAX_NAV_PAGES = 8
 USER_AGENT = "fund-filter-reconciliation/0.1 (+secondary cross-check feed)"
 
 

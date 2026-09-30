@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 import requests
 
-from app.data_sources.secondary.danjuan import DanjuanSource
+from app.data_sources.secondary.danjuan import DEFAULT_MAX_NAV_PAGES, DanjuanSource
 from app.data_sources.secondary.sina import (
     SinaSource,
     _parse_quote_line,
@@ -54,6 +54,7 @@ class FakeDanjuan(DanjuanSource):
         status_script: list[int] | None = None,
         min_interval_seconds: float = 0.0,
         nav_page_size: int = 20,
+        max_nav_pages: int | None = None,
     ) -> None:
         self.nav_pages = nav_pages or {}
         self.status_script = list(status_script or [])
@@ -63,6 +64,7 @@ class FakeDanjuan(DanjuanSource):
             timeout_seconds=1,
             min_interval_seconds=min_interval_seconds,
             nav_page_size=nav_page_size,
+            max_nav_pages=DEFAULT_MAX_NAV_PAGES if max_nav_pages is None else max_nav_pages,
             sleep=self._record_sleep,
         )
 
@@ -230,11 +232,13 @@ def test_danjuan_nav_history_since_none_respects_hard_page_cap() -> None:
     pages = {( "000001", p): _nav_page(
         json.loads(json.dumps(endless_page)), current_page=p, total_pages=100_000
     ) for p in range(1, 21)}
-    source = FakeDanjuan(nav_pages=pages, nav_page_size=1)
+    # Pin the safety cap explicitly so this test stays independent of the
+    # production default window (which is sized to cover a ~5y primary pull).
+    source = FakeDanjuan(nav_pages=pages, nav_page_size=1, max_nav_pages=20)
 
     points = source.fetch_navs("000001", since=None)
 
-    # Bounded by max_nav_pages (default 20) — never an unbounded pull.
+    # Bounded by the explicitly supplied max_nav_pages=20 — never unbounded.
     assert len(points) == 20
     assert len([u for u in source.requested_urls if "nav/history" in u]) == 20
 
