@@ -413,6 +413,12 @@ class ReconciliationService:
                 f"sina accumulated NAV unavailable for {fund.code}; not blocking"
             )
 
+        # Only NOW (after the sina accumulated-NAV critical may have been added) do
+        # we consider softening a literal name mismatch: the softening gate reads
+        # the fully-assembled critical_failures, so a sina accumulated-NAV
+        # disagreement (or any other critical) keeps the name blocking.
+        report = engine.maybe_soften_name_check(report, cfg)
+
         report = replace(report, warnings=[*report.warnings, *extra_warnings])
 
         # Non-strict: degrade a required-source outage to unverified + warning.

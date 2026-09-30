@@ -17,7 +17,8 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass, field
+import unicodedata
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timezone
 from typing import Literal
 
@@ -57,12 +58,78 @@ _SCALE_REL_TOL = 0.5
 #   subscribe = subscribe_rate (认购).
 _RATE_KEYS = ("purchase", "redeem", "subscribe")
 
-_SHARE_CLASS_LETTERS = frozenset({"A", "B", "C", "E", "I", "R"})
+# Share-class suffix letters that must be compared *separately* from the core
+# name: two views of the same fund code must carry the same share label, so a
+# literal "A" vs "C" drift is never collapsed. ``H`` was added after surveying
+# bond funds; English acronym tails (ETF/LOF/QDII) are protected by the CJK guard
+# in :func:`_split_share_class`.
+_SHARE_CLASS_LETTERS = frozenset({"A", "B", "C", "D", "E", "H", "I", "R"})
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _MANAGER_SPLIT_RE = re.compile(r"[\s,，、;；]+")
 _BENCHMARK_PUNCT_RE = re.compile(r"[\s　.,，。;；:：、\-—–()（）\[\]【】'\"“”/]+")
-_TRAILING_SHARE_CLASS_RE = re.compile(r"[\s\-—–]*([A-Z])$")
+
+# --- Fund-name aggressive normalisation (C1a) --------------------------------
+# A small, explicit traditional->simplified map. No third-party opencc/hanziconv
+# dependency: only characters that can plausibly appear in onshore fund names
+# are listed (the 49-bond live survey observed zero traditional characters, so
+# this is a forward-looking safety net, not a production codepath today).
+_TRAD_TO_SIMPLE = {
+    "轉": "转",
+    "換": "换",
+    "債": "债",
+    "證": "证",
+    "權": "权",
+    "財": "财",
+    "資": "资",
+    "銀": "银",
+    "經": "经",
+    "務": "务",
+}
+
+# Whitespace + common punctuation/separators removed entirely for name equality.
+_NAME_PUNCT_RE = re.compile(
+    r"[\s\-—–_/·・.．,，。;；:：、（）()\[\]【】《》<>〈〉'\"“”‘’!！?？]+",
+)
+# Leading platform / marketing prefix that is not part of the fund's own short
+# name (danjuan occasionally surfaces e.g. "蛋卷 XXX债A").
+_SOURCE_PREFIX_RE = re.compile(r"^蛋卷(?:基金)?")
+
+# Conservative, order-sensitive synonym equivalences (applied longest-first, then
+# repeatedly left-to-right). These only collapse *high-confidence abbreviation*
+# variants observed across eastmoney<->danjuan (see the F-phase name survey):
+#   "可转债债券" == "可转换债券" == "可转债"  (convertible bond wording)
+#   "纯债债券" == "纯债" == "债" / "债券" == "债" (pure-bond wording)
+# Marketing coinages that merely *add* a word (e.g. eastmoney "稳健债券" vs
+# danjuan "稳健收益债") are deliberately NOT mapped: without independent NAV
+# evidence they must keep blocking.
+_NAME_SYNONYMS: tuple[tuple[str, str], ...] = (
+    ("可转债债券", "可转债"),
+    ("可转换债券", "可转债"),
+    ("纯债债券", "纯债"),
+    ("纯债", "债"),
+    ("债券", "债"),
+)
+
+# Bond-type *wording* tokens (longest first). The soft-degrade guard strips these
+# from both normalised cores and requires the remaining skeleton to be identical:
+# that guarantees the only difference between the two names is bond-type wording
+# (the high-confidence synonym space), never a marketing coinage (e.g. an extra
+# "收益"/"增利") nor a management-company prefix drift. Such residual differences
+# stay a hard blocking major mismatch.
+_BOND_TYPE_SKELETON_TOKENS: tuple[str, ...] = (
+    "可转换债券",
+    "可转债债券",
+    "可转债",
+    "转债",
+    "纯债债券",
+    "纯债",
+    "短债",
+    "债券",
+    "利率债",
+    "信用债",
+    "债",
+)
 
 
 # --- Contract dataclasses ---------------------------------------------------
@@ -247,33 +314,180 @@ def normalize_text(text: str | None) -> str:
 
 
 def normalize_name(name: str | None) -> str:
-    """Whitespace-normalise a fund display name (original share class kept)."""
+    """Whitespace-normalise a fund display name (original share class kept).
+
+    Kept for back-compat; the cross-check path uses :func:`normalize_fund_name`.
+    """
     return normalize_text(name)
 
 
-def _base_name(normalized: str) -> str:
-    """Strip a trailing share-class letter (A/C/...) for containment compare."""
-    match = _TRAILING_SHARE_CLASS_RE.search(normalized)
+def normalize_fund_name(name: str | None) -> str:
+    """Aggressively normalise a fund short name for cross-source comparison.
+
+    Pipeline (pure, no IO):
+      1. Unicode NFKC (fullwidth / compatibility fold);
+      2. strip a leading platform/marketing prefix (e.g. "蛋卷");
+      3. drop all whitespace and common punctuation;
+      4. one-way traditional->simplified via a small explicit dict;
+      5. apply conservative synonym equivalences, longest-first.
+
+    The trailing share-class letter (A/C/E/...) is intentionally *not* removed
+    here: callers compare it separately via :func:`_split_share_class` so a real
+    "A" vs "C" drift never matches.
+    """
+    if not name:
+        return ""
+    text = unicodedata.normalize("NFKC", name)
+    text = _SOURCE_PREFIX_RE.sub("", text)
+    text = _NAME_PUNCT_RE.sub("", text)
+    text = "".join(_TRAD_TO_SIMPLE.get(ch, ch) for ch in text)
+    for src, dst in _NAME_SYNONYMS:
+        text = text.replace(src, dst)
+    return text
+
+
+def _split_share_class(normalized: str) -> tuple[str, str]:
+    """Split an already-normalised name into ``(core_name, share_class)``.
+
+    ``share_class`` is ``""`` when no share marker is present. A trailing single
+    ASCII letter is only treated as a share class when it follows a non-ASCII
+    (CJK) character, so English acronym tails (ETF / LOF / QDII) are not bitten.
+    """
+    if not normalized:
+        return "", ""
+    match = re.search(r"([A-Z])类$", normalized)
     if match and match.group(1) in _SHARE_CLASS_LETTERS:
-        return normalized[: match.start()].strip()
-    return normalized.strip()
+        return normalized[: match.start()], match.group(1)
+    match = re.search(r"类([A-Z])$", normalized)
+    if match and match.group(1) in _SHARE_CLASS_LETTERS:
+        return normalized[: match.start()], match.group(1)
+    last = normalized[-1]
+    if last in _SHARE_CLASS_LETTERS:
+        prev = normalized[-2] if len(normalized) >= 2 else ""
+        if not prev or not prev.isascii():
+            return normalized[:-1], last
+    return normalized, ""
 
 
 def name_matches(a: str | None, b: str | None) -> bool:
-    """Names agree if normalised-equal, or containment after share-class strip."""
-    na = normalize_text(a)
-    nb = normalize_text(b)
+    """Names agree iff their normalised cores match AND share classes agree.
+
+    Cores compare by equality or one-sided containment (after aggressive
+    normalisation). A share class disclosed on *both* sides must be identical, so
+    e.g. "核心名A" vs "核心名C" never matches. A share marker present on only one
+    side does not by itself forbid the comparison.
+    """
+    na = normalize_fund_name(a)
+    nb = normalize_fund_name(b)
     if not na or not nb:
         return False
-    if na == nb:
-        return True
-    base_a = _base_name(na)
-    base_b = _base_name(nb)
-    if not base_a or not base_b:
+    core_a, share_a = _split_share_class(na)
+    core_b, share_b = _split_share_class(nb)
+    if not core_a or not core_b:
         return False
-    compact_a = base_a.replace(" ", "")
-    compact_b = base_b.replace(" ", "")
-    return compact_a in compact_b or compact_b in compact_a
+    if share_a and share_b and share_a != share_b:
+        return False
+    if core_a == core_b:
+        return True
+    return core_a in core_b or core_b in core_a
+
+
+def _name_skeleton(normalized_core: str) -> str:
+    """Strip every bond-type wording token (longest-first) from a normalised core.
+
+    Two names whose skeletons are identical differ *only* in bond-type wording;
+    any marketing coinage or company-prefix drift survives in the skeleton and
+    keeps the names apart.
+    """
+    skeleton = normalized_core
+    for token in _BOND_TYPE_SKELETON_TOKENS:
+        skeleton = skeleton.replace(token, "")
+    return skeleton
+
+
+def maybe_soften_name_check(
+    report: FundReconciliationReport,
+    cfg: ReconcileConfig,
+) -> FundReconciliationReport:
+    """Downgrade a literal ``name_mismatch`` to a non-blocking
+    ``name_mismatch_soft`` warning, *only* when every gate below holds.
+
+    This is a narrow safety net for high-confidence bond-type abbreviation drift
+    (e.g. "可转债" vs "可转换债券" / "纯债" vs "债券") that survived
+    :func:`normalize_fund_name`. It NEVER relaxes company/custodian/type checks
+    and NEVER relaxes a name whose core skeleton differs (a marketing coinage
+    such as an extra "收益", or a management-company prefix drift, stays a hard
+    blocking major mismatch).
+
+    Required evidence (all already computed on the report; no new tolerance):
+      * the only blocking major disagreement is the name field itself;
+      * unit-NAV coverage >= ``cfg.min_nav_coverage`` and every shared point
+        matches (``nav_mismatch == 0``);
+      * there is NO critical failure at all in the assembled report (this covers
+        the sina accumulated-NAV disagreement the orchestrator adds; a missing
+        sina quote is a warning, not a critical, and so does not block softening);
+      * ``found_date`` is an exact match (not skipped, not mismatch);
+      * both names disclose the SAME share class;
+      * the two normalised cores share an identical bond-type-stripped skeleton.
+    """
+    name_check = next((fc for fc in report.field_checks if fc.field == "name"), None)
+    if name_check is None or name_check.rule != "name_mismatch" or name_check.match:
+        return report
+
+    # Hard evidence gate: any shortfall keeps the name as a blocking mismatch.
+    if report.nav_coverage < cfg.min_nav_coverage:
+        return report
+    if report.nav_mismatch != 0:
+        return report
+    if report.critical_failures:
+        return report
+    found_date = next(
+        (fc for fc in report.field_checks if fc.field == "found_date"), None
+    )
+    if found_date is None or found_date.rule != "found_date_exact":
+        return report
+
+    # Share class must agree: "核心名A" vs "核心名C" must never be softened.
+    p_raw = name_check.values.get("primary")
+    s_raw = name_check.values.get("secondary")
+    na = normalize_fund_name(str(p_raw)) if p_raw else ""
+    nb = normalize_fund_name(str(s_raw)) if s_raw else ""
+    _core_a, share_a = _split_share_class(na)
+    _core_b, share_b = _split_share_class(nb)
+    if share_a and share_b and share_a != share_b:
+        return report
+    # Skeleton must be identical: the only residual difference may be bond-type
+    # wording. A marketing addition (e.g. "收益") or company-prefix drift leaves
+    # the skeletons unequal -> stay blocking.
+    if _name_skeleton(_core_a) != _name_skeleton(_core_b):
+        return report
+
+    softened = FieldCheck(
+        field="name",
+        severity="major",
+        values=name_check.values,
+        match=False,
+        rule="name_mismatch_soft",
+        detail=(
+            f"name differs literally ({p_raw!r} vs {s_raw!r}) but kept non-blocking: "
+            f"only bond-type wording differs and strong cross-source evidence agrees "
+            f"(nav_coverage={report.nav_coverage:.4f}>={cfg.min_nav_coverage}, "
+            f"nav_mismatch=0, found_date exact, no critical failure)"
+        ),
+    )
+    new_field_checks = [
+        softened if fc is name_check else fc for fc in report.field_checks
+    ]
+    soft_warning = f"name: name_mismatch_soft: {softened.detail}"
+    # Drop the previous hard "name: ..." warning and record the auditable soft one.
+    new_warnings = [w for w in report.warnings if not w.startswith("name: ")]
+    new_warnings.append(soft_warning)
+    replaced = replace(
+        report,
+        field_checks=new_field_checks,
+        warnings=new_warnings,
+    )
+    return adjudicate(replaced, cfg)
 
 
 def _contains(a: str | None, b: str | None) -> bool:
@@ -965,7 +1179,12 @@ def adjudicate(
     major_fails = [
         fc
         for fc in report.field_checks
-        if fc.severity == "major" and not fc.match and not fc.rule.endswith("_skipped")
+        if fc.severity == "major"
+        and not fc.match
+        and not fc.rule.endswith("_skipped")
+        # A name mismatch already proven non-blocking by strong independent
+        # evidence (rule=name_mismatch_soft) must not re-block the fund.
+        and fc.rule != "name_mismatch_soft"
     ]
     scale_fails = [
         fc
@@ -1105,8 +1324,10 @@ __all__ = [
     "custodian_matches",
     "managers_overlap",
     "map_fund_type",
+    "maybe_soften_name_check",
     "name_matches",
     "normalize_benchmark",
+    "normalize_fund_name",
     "normalize_name",
     "normalize_text",
     "numbers_match",

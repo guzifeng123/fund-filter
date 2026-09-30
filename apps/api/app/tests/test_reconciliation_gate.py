@@ -519,3 +519,53 @@ def test_fund_type_raw_falls_back_to_hint_when_unset() -> None:
     fund_type_check = [c for c in report.field_checks if c.field == "fund_type"]
     assert fund_type_check[0].match is True
     assert report.status == "verified"
+
+
+def _name_isolated(primary_name: str, danjuan_name: str) -> Any:
+    fund = _fund()
+    fund.name = primary_name
+    fund._fund_type_raw = "债券型-长债"
+    danjuan_profile = engine.ReconcilableProfile(
+        code=fund.code,
+        name=danjuan_name,
+        full_name=None,
+        found_date=date(2018, 3, 15),
+        company="华夏基金管理有限公司",
+        custodian="中国建设银行股份有限公司",
+        managers=["陈安"],
+        fund_type_raw="债券型-长债",
+        benchmark=None,
+        scale_text="43.0亿",
+        rates=None,
+        source="danjuan",
+    )
+    danjuan = FakeDanjuan(navs=_consistent_danjuan_navs(), profile=danjuan_profile)
+    service = ReconciliationService(StubSource([fund]), danjuan, FakeSina(acc=1.02), settings)
+    return service.reconcile_one_fund_isolated(fund).report
+
+
+def test_gate_softens_bond_type_wording_drift_to_verified() -> None:
+    # End-to-end through C3: "转债" vs "可转债" residual + full strong evidence.
+    report = _name_isolated("测试转债A", "测试可转债A")
+    name_check = [c for c in report.field_checks if c.field == "name"][0]
+    assert name_check.rule == "name_mismatch_soft"
+    assert name_check.values["primary"] == "测试转债A"
+    assert name_check.values["secondary"] == "测试可转债A"
+    assert report.status == "verified"
+    assert any("name_mismatch_soft" in w for w in report.warnings)
+
+
+def test_gate_marketing_word_drift_still_blocks() -> None:
+    # One side adds a marketing word ("收益"): C3 must NOT soften.
+    report = _name_isolated("测试稳健债券C", "测试稳健收益债C")
+    name_check = [c for c in report.field_checks if c.field == "name"][0]
+    assert name_check.rule == "name_mismatch"
+    assert report.status == "mismatch"
+
+
+def test_gate_share_drift_still_blocks() -> None:
+    report = _name_isolated("测试转债A", "测试转债C")
+    name_check = [c for c in report.field_checks if c.field == "name"][0]
+    assert name_check.rule == "name_mismatch"
+    assert report.status == "mismatch"
+
