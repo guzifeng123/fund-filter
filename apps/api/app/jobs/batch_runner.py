@@ -34,7 +34,7 @@ import inspect
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 import logging
-from typing import Protocol, cast
+from typing import Protocol
 from uuid import uuid4
 
 from sqlalchemy import func, select
@@ -217,12 +217,15 @@ class BatchRunner:
     # ------------------------------------------------------------------ claim
     def _claim(self, batch_size: int) -> list[str]:
         # D1 forward-compat: forward shards/shard only once claim_batch accepts
-        # them. The runtime inspect check above selects the branch; the cast lets
-        # mypy check the shard-aware call against the D1 signature while still
-        # passing on the current 3-arg signature (no **object dict expansion).
+        # them. getattr yields Any, so binding it to the shard-aware Protocol
+        # needs no cast: passes whether or not D1's shard kwargs exist at
+        # type-check time, while the runtime inspect probe selects this branch
+        # only when claim_batch actually accepts shards/shard.
         if self._claim_supports_shards:
-            claim = cast("_ShardAwareClaim", self._state.claim_batch)
-            return list(claim(batch_size, self._worker_id, shards=self._shards, shard=self._shard))
+            shard_claim: _ShardAwareClaim = getattr(self._state, "claim_batch")
+            return list(
+                shard_claim(batch_size, self._worker_id, shards=self._shards, shard=self._shard)
+            )
         return list(self._state.claim_batch(batch_size, self._worker_id))
 
     # ------------------------------------------------------------ per-fund DB
