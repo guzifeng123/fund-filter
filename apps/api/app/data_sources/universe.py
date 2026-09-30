@@ -21,8 +21,10 @@ Contract for D1-D4 (do not loosen):
 * Results are deterministically sorted by ``code``.
 * akshare is imported lazily *inside* the fetch function; tests inject an inline
   pandas DataFrame and never touch the network.
-* A same-day JSON cache at ``<cache_dir>/universe_YYYYMMDD.json`` is reused: a
-  warm cache short-circuits the pull.
+* A same-day JSON cache at ``<cache_dir>/universe_YYYYMMDD.json`` always stores
+  the UNFILTERED full-market snapshot. A warm cache short-circuits the pull and
+  each caller's filters are reapplied in memory, so a narrow allow-list request
+  can never shrink or poison the shared daily cache.
 """
 
 from __future__ import annotations
@@ -31,7 +33,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 import pandas as pd  # type: ignore[import-untyped]
 
@@ -126,13 +128,41 @@ def build_name_type_map(name_df: pd.DataFrame) -> dict[str, str]:
     return type_map
 
 
+def _matches_filters(fund: UniverseFund, filters: UniverseFilters) -> bool:
+    """Return True when a normalised fund passes every active filter."""
+    if filters.allow_codes and fund.code not in filters.allow_codes:
+        return False
+    if fund.code in filters.deny_codes:
+        return False
+    if filters.type_majors and fund.type_major not in filters.type_majors:
+        return False
+    if filters.require_has_3y and not fund.has_3y:
+        return False
+    if any(keyword and keyword in fund.name for keyword in filters.name_exclude_keywords):
+        return False
+    return True
+
+
+def filter_universe(funds: Iterable[UniverseFund], filters: UniverseFilters) -> list[UniverseFund]:
+    """Apply ``filters`` to an already-normalised, code-sorted universe.
+
+    Filtering is deliberately separate from snapshot (de)normalisation so the
+    shared daily cache can always hold the unfiltered full market while each
+    caller's allow-list / type / 3y restrictions are applied in memory.
+    """
+    kept = [fund for fund in funds if _matches_filters(fund, filters)]
+    if not kept:
+        raise ValueError("universe filtered down to 0 funds; check filters are not over-strict")
+    return kept
+
+
 def normalize_universe(
     rank_df: pd.DataFrame,
     name_df: pd.DataFrame,
     *,
     filters: UniverseFilters,
 ) -> list[UniverseFund]:
-    """LEFT JOIN rank<->name, normalise, filter, and sort by code."""
+    """LEFT JOIN rank<->name, normalise, sort by code, then apply filters."""
     if rank_df is None or rank_df.empty:
         raise ValueError("universe rank table is empty; refusing to build an empty plan")
     type_map = build_name_type_map(name_df)
@@ -141,21 +171,11 @@ def normalize_universe(
         code = str(record.get(_RANK_CODE_COL, "")).strip()
         if not code:
             continue
-        if filters.allow_codes and code not in filters.allow_codes:
-            continue
-        if code in filters.deny_codes:
-            continue
         name = str(record.get(_RANK_NAME_COL, "") or "").strip()
         type_detail = type_map.get(code, "")
         type_major = derive_major_type(type_detail)
-        if filters.type_majors and type_major not in filters.type_majors:
-            continue
         three_year = _optional_float(record.get(_RANK_3Y_COL))
         has_3y = three_year is not None
-        if filters.require_has_3y and not has_3y:
-            continue
-        if any(keyword and keyword in name for keyword in filters.name_exclude_keywords):
-            continue
         funds.append(
             UniverseFund(
                 code=code,
@@ -170,9 +190,7 @@ def normalize_universe(
             )
         )
     funds.sort(key=lambda fund: fund.code)
-    if not funds:
-        raise ValueError("universe filtered down to 0 funds; check filters are not over-strict")
-    return funds
+    return filter_universe(funds, filters)
 
 
 def default_fetcher() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -217,18 +235,23 @@ def load_or_fetch_universe(
     clock: Callable[[], date] = lambda: datetime.now(tz=timezone.utc).date(),
     fetcher: UniverseFetcher = default_fetcher,
 ) -> list[UniverseFund]:
-    """Return the normalised universe, reusing today's JSON cache when present."""
+    """Return the normalised universe, reusing today's full-snapshot cache.
+
+    The cache always holds the unfiltered full market. On a miss we fetch and
+    persist that full snapshot; the caller's ``filters`` are then applied in
+    memory on every path so narrow allow-list requests never poison the cache.
+    """
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
     target = _cache_path(cache_dir, clock())
     if target.exists():
         payload = json.loads(target.read_text(encoding="utf-8"))
-        return [_fund_from_dict(row) for row in payload]
-
-    rank_df, name_df = fetcher()
-    funds = normalize_universe(rank_df, name_df, filters=filters)
-    target.write_text(
-        json.dumps([_fund_to_dict(fund) for fund in funds], ensure_ascii=False, indent=1),
-        encoding="utf-8",
-    )
-    return funds
+        full = [_fund_from_dict(row) for row in payload]
+    else:
+        rank_df, name_df = fetcher()
+        full = normalize_universe(rank_df, name_df, filters=UniverseFilters())
+        target.write_text(
+            json.dumps([_fund_to_dict(fund) for fund in full], ensure_ascii=False, indent=1),
+            encoding="utf-8",
+        )
+    return filter_universe(full, filters)

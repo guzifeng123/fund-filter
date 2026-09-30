@@ -6,6 +6,7 @@ the network is never touched (fetcher is injected).
 
 from __future__ import annotations
 
+import json
 import math
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -198,6 +199,55 @@ def test_cache_is_reused_without_re_fetching(tmp_path: Path, monkeypatch: Any) -
     assert calls["n"] == 1  # second call hit the JSON cache
     assert [f.code for f in first] == [f.code for f in second]
     assert (tmp_path / "universe_20260930.json").exists()
+
+
+def test_cache_always_stores_full_snapshot_and_filters_in_memory(tmp_path: Path) -> None:
+    calls = {"n": 0}
+
+    def fake_fetcher() -> tuple[pd.DataFrame, pd.DataFrame]:
+        calls["n"] += 1
+        return _rank_df(), _name_df()
+
+    fixed_clock = lambda: date(2026, 9, 30)  # noqa: E731
+    total = len(_rank_df())
+
+    # A narrow allow-list request returns just that code...
+    one = load_or_fetch_universe(
+        cache_dir=tmp_path,
+        filters=UniverseFilters(allow_codes=frozenset({"000001"})),
+        clock=fixed_clock,
+        fetcher=fake_fetcher,
+    )
+    assert [f.code for f in one] == ["000001"]
+    # ...but the persisted daily cache must hold the UNFILTERED full snapshot.
+    cached = json.loads((tmp_path / "universe_20260930.json").read_text(encoding="utf-8"))
+    assert len(cached) == total
+
+    # Warm cache: no re-fetch, empty filters return the whole market...
+    full = load_or_fetch_universe(
+        cache_dir=tmp_path,
+        filters=UniverseFilters(),
+        clock=fixed_clock,
+        fetcher=fake_fetcher,
+    )
+    assert len(full) == total
+    # ...and a different filter is reapplied in memory against the warm cache.
+    three_y = load_or_fetch_universe(
+        cache_dir=tmp_path,
+        filters=UniverseFilters(require_has_3y=True),
+        clock=fixed_clock,
+        fetcher=fake_fetcher,
+    )
+    assert calls["n"] == 1
+    # Every rank row except the 货币 fund (近3年 = None) passes the 3y gate.
+    assert {f.code for f in three_y} == {
+        "161725",
+        "000834",
+        "005221",
+        "110007",
+        "000001",
+        "999999",
+    }
 
 
 def test_nan_three_year_counts_as_no_history() -> None:
