@@ -32,7 +32,33 @@ def get_connect_args(database_url: str) -> dict[str, object]:
     if backend_name == "sqlite":
         return {"check_same_thread": False}
     if backend_name == "postgresql":
-        return {"connect_timeout": settings.database_connect_timeout_seconds}
+        # psycopg3: fail fast on a dead server and bound runaway statements at
+        # the server side (statement_timeout applied per-session via `options`).
+        statement_timeout_ms = settings.fund_pg_statement_timeout_seconds * 1000
+        return {
+            "connect_timeout": settings.fund_pg_connect_timeout_seconds,
+            "options": f"-c statement_timeout={int(statement_timeout_ms)}",
+        }
+    return {}
+
+
+def get_engine_pool_kwargs(database_url: str) -> dict[str, object]:
+    """Pool / pre-ping kwargs for ``create_engine``, split by dialect.
+
+    Kept as a pure function (no engine created) so the dialect branch can be
+    unit-tested without a live server. SQLite keeps its historical behaviour
+    (``pool_pre_ping=True``, no explicit pool size) and is deliberately not
+    given a sized pool.
+    """
+    backend_name = make_url(database_url).get_backend_name()
+    if backend_name == "postgresql":
+        return {
+            "pool_size": settings.fund_pg_pool_size,
+            "max_overflow": settings.fund_pg_max_overflow,
+            "pool_pre_ping": settings.fund_pg_pool_pre_ping,
+        }
+    if backend_name == "sqlite":
+        return {"pool_pre_ping": True}
     return {}
 
 
@@ -41,8 +67,8 @@ def get_engine() -> Engine:
     if engine is None:
         engine = create_engine(
             settings.database_url,
-            pool_pre_ping=True,
             connect_args=get_connect_args(settings.database_url),
+            **get_engine_pool_kwargs(settings.database_url),
         )
         if make_url(settings.database_url).get_backend_name() == "sqlite":
             event.listen(engine, "connect", _enable_sqlite_foreign_keys)
