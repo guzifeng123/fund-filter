@@ -14,7 +14,7 @@ def _fund(
     type_major: str,
     type_detail: str = "",
     *,
-    has_3y: bool = True,
+    has_3y: bool | None = True,
 ) -> UniverseFund:
     return UniverseFund(
         code=code,
@@ -109,3 +109,41 @@ def test_unknown_type_is_unsupported_secondary() -> None:
     decision = classify(_fund("000001", "未知类型基金", "未知", ""))
     assert decision.route == "unsupported_secondary"
     assert decision.reason == "unknown_type"
+
+
+def test_rank_uncovered_unknown_age_is_supported_deferred() -> None:
+    # F-phase: has_3y=None (rank-uncovered, e.g. 050025) must NOT be written off
+    # as new_short_history; it becomes a supported candidate and the precise
+    # >=3y check is deferred to the runner.
+    deferred = _fund("050025", "博时标普500ETF联接(QDII)A", "QDII", "QDII-普通股票", has_3y=None)
+    decision = classify(deferred)
+    assert decision.route == "supported"
+    assert decision.reason == "eligible_open_end"
+    assert decision.detail["age_evidence"] == "unknown"
+    # ...even when include_short_history is off.
+    off = classify(deferred, include_short_history=False)
+    assert off.route == "supported"
+
+
+def test_hk_mutual_recognition_is_special() -> None:
+    decision = classify(_fund("000001", "某港股互认基金", "混合型", "混合型-灵活", has_3y=None))
+    assert decision.route == "special_caliber"
+    assert decision.detail["special_kind"] == "hk_mutual_recognition"
+
+
+def test_backend_and_forex_shares_stay_supported_candidates() -> None:
+    # Backend / USD shares are independent sellable codes: kept as supported, not
+    # dropped or merged. The danjuan gate still skips them later if unsellable.
+    backend = _fund("000002", "华夏成长混合(后端)", "混合型", "混合型-灵活", has_3y=None)
+    assert classify(backend).route == "supported"
+    forex = _fund("000044", "嘉实美国成长股票美元现汇", "QDII", "QDII-普通股票", has_3y=None)
+    assert classify(forex).route == "supported"
+
+
+def test_on_exchange_etf_body_special_but_feeder_and_lof_kept() -> None:
+    body = _fund("510300", "华泰柏瑞沪深300ETF", "指数型", "指数型-股票", has_3y=None)
+    assert classify(body).detail["special_kind"] == "on_exchange_etf"
+    feeder = _fund("000051", "华夏沪深300ETF联接A", "指数型", "指数型-股票", has_3y=None)
+    assert classify(feeder).route == "supported"
+    lof = _fund("161725", "招商中证白酒指数(LOF)A", "指数型", "指数型-股票", has_3y=None)
+    assert classify(lof).route == "supported"

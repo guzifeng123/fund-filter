@@ -68,6 +68,10 @@ logger = logging.getLogger(__name__)
 REASON_DANJUAN_NOT_LISTED = "danjuan_not_listed"
 REASON_QUALITY_FAILED = "quality_failed"
 REASON_RECONCILIATION_MISMATCH = "reconciliation_mismatch"
+#: F-phase: precise >=3y check moved down from plan time to here. A fund whose
+#: primary-source inception_date is younger than 3y (and short history is off)
+#: is skipped here -- never staged, never promoted into a generation.
+REASON_INSUFFICIENT_HISTORY = "insufficient_history"
 
 #: Cap the code lists embedded in the per-generation details envelope, mirroring
 #: the existing DETAIL_FUND_LIMIT / NAV_WARNING_DETAIL_LIMIT truncation style.
@@ -241,6 +245,30 @@ class BatchRunner:
             return None
 
     # ------------------------------------------------------------- per-fund
+    def _min_inception_date(self) -> date:
+        """Earliest inception_date that still counts as ">=3y" at ``self._as_of``."""
+        as_of = self._as_of
+        try:
+            return date(as_of.year - 3, as_of.month, as_of.day)
+        except ValueError:  # Feb 29 -> clamp to Feb 28 of three years prior
+            return date(as_of.year - 3, as_of.month, 28)
+
+    def _has_min_history(self, fund: FundDetail) -> bool:
+        """True when the fund's inception_date is not younger than 3y.
+
+        ``inception_date`` is an ISO ``YYYY-MM-DD`` string set by the builder
+        from the F10 成立日期. A fund qualifies once its inception_date is on or
+        before the three-year cutoff relative to ``self._as_of``.
+        """
+        try:
+            inception = date.fromisoformat(fund.inception_date)
+        except ValueError:
+            # An unparseable inception date is a structural data reject, not an
+            # age decision: let it fall through to the B2 quality gate below.
+            logger.warning("unparseable inception_date=%r for %s", fund.inception_date, fund.code)
+            return True
+        return inception <= self._min_inception_date()
+
     def _process_one(self, code: str) -> _Outcome:
         start_date = self._latest_nav_trade_date(code)
         try:
@@ -258,6 +286,15 @@ class BatchRunner:
             # Primary build/parse produced an unusable fund: deterministic data reject.
             logger.info("primary build rejected %s: %s", code, exc)
             return _Outcome.skipped(code, REASON_QUALITY_FAILED)
+
+        # F-phase: precise ">=3y" hard check, moved down from plan time. We only
+        # learn the real inception_date once the primary source is fetched. When
+        # short-history inclusion is off, a fund younger than 3y is skipped here
+        # (never staged, never promoted into a generation); the switch on lets it
+        # through, aligned with the short_history_included caliber.
+        if not self._settings.fund_batch_include_short_history and not self._has_min_history(fund):
+            logger.info("fund %s inception_date=%s younger than 3y; skipping", code, fund.inception_date)
+            return _Outcome.skipped(code, REASON_INSUFFICIENT_HISTORY)
 
         # B2 per-fund structural quality gate.
         series_report = series_q.assess_nav_series_quality([fund], source_name=self._source_name)
@@ -441,5 +478,6 @@ __all__ = [
     "REASON_DANJUAN_NOT_LISTED",
     "REASON_QUALITY_FAILED",
     "REASON_RECONCILIATION_MISMATCH",
+    "REASON_INSUFFICIENT_HISTORY",
     "RunSummary",
 ]

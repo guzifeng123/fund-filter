@@ -141,6 +141,23 @@ def test_all_result_buckets_are_classified(tmp_path: Path) -> None:
     assert report["failures_sample"][0]["attempts"] == 2
 
 
+def test_insufficient_history_lands_in_special_bucket(tmp_path: Path) -> None:
+    clock = Clock()
+    # F-phase: the runner's per-fund inception-date skip must join the special
+    # / age-gated bucket alongside history_lt_3y, never leaking into other.
+    rows = [
+        _row("000001", status="skipped", reason="insufficient_history"),
+        _row("000002", status="skipped", reason="history_lt_3y"),
+    ]
+    db = tmp_path / "state.db"
+    _seed(db, rows, clock)
+    report = aggregate_report(db, job_id="j", report_dir=tmp_path / "r")
+    t = report["totals"]
+    assert t["skipped_special"] == 2
+    assert t["other"] == 0
+    assert "insufficient_history" not in report["other_reasons"]
+
+
 def test_unknown_reason_and_done_unwritten_land_in_other(tmp_path: Path) -> None:
     clock = Clock()
     rows = [

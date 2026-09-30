@@ -73,8 +73,9 @@
 ## 3. 全量回填
 
 ### 3.1 分片与并发
-- 全市场开放式基金约 **2 万只**。通过 `--shards N`（配合 `--shard i`）把待处理集合
-  按 `seq % shards` 确定性切分，可在多机/多进程间分摊，互不重叠。
+- 全市场可售份额约 **2.8 万只**（`fund_name_em()` 全名单；其中约 2 万只有当日业绩排名）。
+  通过 `--shards N`（配合 `--shard i`）把待处理集合按 `seq % shards` 确定性切分，
+  可在多机/多进程间分摊，互不重叠。
 - `FUND_BATCH_WORKERS` **默认 1，硬上限 3**；生产建议保持 1，靠「多进程分片」而非「多线程」提速，
   以严格遵守每域名 0.5s 的礼貌间隔。
 
@@ -127,13 +128,43 @@ python scripts/batch_incremental_plan.py --out output/batch/today-plan.json
 
 ---
 
-## 6. 短历史口径（`FUND_BATCH_INCLUDE_SHORT_HISTORY`）
+## 6. 全市场清单口径（F 阶段：name-em 全名单为主骨架）
 
-- **默认 `false`**：成立但成立不足 3 年的基金走 `new_short_history` / `history_lt_3y`，
-  运行时落入 `skipped_special`，**默认排除**。
-- **打开后**：这些基金按 `reason=short_history_included` 被纳入并正常回填；
-  报告中 `verified` 仍计数，同时单独给出 `short_history_included` 子计数，便于与「满 3 年」主口径区分。
-- 切换开关只影响新规划的基金口径，不改变已落库的历史数据解读。
+- **主骨架翻转**：清单以 `ak.fund_name_em()`（约 2.8 万行，完整可售份额名单）为主驱动；
+  `fund_open_fund_rank_em(symbol="全部")`（约 2 万行，仅「当日有业绩排名」子集）降级为**补充**，
+  按 `基金代码` LEFT JOIN 提供 `近3年`（→ `has_3y`）、最新单位/累计净值与净值日期。
+- **并集**：代码集合取 `name ∪ rank`，去重后按 code 排序。rank 缺行的基金**保留**，
+  `has_3y=None`、净值字段置空——**绝不伪造、绝不因 rank 缺行丢弃**（修复了旧口径少算
+  约 7.5k 只债基/FOF/份额/QDII 的系统性漏列）。
+- **`has_3y` 三态**：`True`=rank 行且近3年非空（已知满 3 年）；`False`=rank 行但近3年为空
+  （已知不足 3 年）；`None`=rank 未覆盖（年龄未知，**不判 short history，下沉到 runner 逐只核成立日**）。
+- **份额类别不合并**：A/C/E/Y/I、后端、美元/现汇/现钞、人民币份额是**独立可申购代码**，
+  各自成行、不去重；`UniverseFund.share_class` / `share_is_backend` / `share_is_forex` 仅作标注。
+- **路由排除桶（special_caliber，给可审计 reason/detail）**：货币型、场内交易所 ETF **本体**
+  （保留 ETF 联接/feeder 与可场外申赎 LOF，如 161725）、港股互认、REITs（含 QDII-REITs）、
+  商品型。候选保留：股票/混合/债券（含定开债、债券全部子类）、场外指数与 ETF 联接、FOF、
+  普通 QDII（QDII 商品归 special）。
+- **存续状态局限（重要）**：`fund_name_em()` 列仅 `基金代码/拼音缩写/基金简称/基金类型/拼音全称`，
+  **没有清盘/终止/存续状态字段**。因此本管线**不做存续状态校验**，不臆造状态；清盘/终止份额
+  会在主源 fetch 失败或蛋卷未列时自然落入 skip。后续若 akshare 增补状态列再补排除。
+
+## 7. 短历史 / 满 3 年口径（`FUND_BATCH_INCLUDE_SHORT_HISTORY`）
+
+- **方案 b（成立满 3 年硬校验下沉到 sync 逐只）**：plan 阶段**不逐只查成立日**。
+  - `has_3y=True` → 直接 supported；
+  - `has_3y=None`（rank 未覆盖）→ **不判 new_short_history**，作为 supported 候选下沉；
+  - `has_3y=False`（rank 已知不足 3 年）→ 默认 `false` 时在清单层即按 `history_lt_3y` 排除。
+- **逐只硬校验（batch_runner）**：主源 fetch 得到 `FundDetail.inception_date`（F10 成立日期）后，
+  若 `inception_date > as_of - 3 年`（按日期精确）且 `FUND_BATCH_INCLUDE_SHORT_HISTORY=false`，
+  → `mark_skipped(reason="insufficient_history")`，**绝不写库、不入代**；
+  开关 `true` 时放行（对齐 `short_history_included` 口径）。
+- **`insufficient_history` 与 `history_lt_3y` 同桶**：都落入报告 `skipped_special`；
+  任何未知 reason 仍落 `other` 且不丢数（`other_reasons` 列全）。
+- **第二源不放宽**：名单扩大后，蛋卷「暂不销售/未列」的后端/外币/部分定开/小份额仍
+  `danjuan_not_listed`（unverified）skip，**不得为凑入库数接受单源**。
+- **打开 `FUND_BATCH_INCLUDE_SHORT_HISTORY` 后**：不足 3 年基金按 `reason=short_history_included`
+  纳入并正常回填，报告 `verified` 计数并单独给出 `short_history_included` 子计数。
+- 切换开关只影响新规划基金口径，不改变已落库历史数据的解读。
 
 ---
 
@@ -173,7 +204,7 @@ python scripts/batch_incremental_plan.py --out output/batch/today-plan.json
 | `verified` | `done` 且 `fund_written=1`：真正落库的合格基金 |
 | `short_history_included` | 被短历史开关纳入并落库的子计数 |
 | `skipped_secondary` | `reason=danjuan_not_listed`（蛋卷未列/404/暂不销售，次级份额同桶） |
-| `skipped_special` | `reason∈{special_caliber, unknown_type, history_lt_3y}`（货币/场内 ETF/QDII 商品/REITs/不足 3 年，默认排除） |
+| `skipped_special` | `reason∈{special_caliber, unknown_type, history_lt_3y, insufficient_history}`（货币/场内 ETF/QDII 商品/REITs/互认/已知不足 3 年/逐只核成立日不足 3 年，默认排除） |
 | `skipped_quality` | `reason=quality_failed`（B2 质量门 error） |
 | `failed` | = `failed_retryable`（瞬态，可重试）+ `failed_terminal_reconciliation`（终态） |
 | `failed_terminal_reconciliation` | `skipped` 且 `reason=reconciliation_mismatch`：多源核对矛盾，**终态不可重试** |

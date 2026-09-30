@@ -16,7 +16,8 @@ Result buckets are the D2 contract verbatim (do not rename):
 * ``verified``            -- ``status=done`` AND ``fund_written=1``.
 * ``skipped_secondary``   -- ``status=skipped`` AND reason ∈ {danjuan_not_listed}.
 * ``skipped_special``    -- ``status=skipped`` AND reason ∈
-                            {special_caliber, unknown_type, history_lt_3y}.
+                            {special_caliber, unknown_type, history_lt_3y,
+                             insufficient_history}.
 * ``skipped_quality``     -- ``status=skipped`` AND reason = quality_failed.
 * ``failed``             -- ``status=failed`` (retryable transient) PLUS
                             ``status=skipped`` AND reason = reconciliation_mismatch
@@ -43,8 +44,11 @@ from app.core.config import settings
 
 # --- D2 result vocabulary (frozen, verbatim) -------------------------------
 SKIPPED_SECONDARY_REASONS: frozenset[str] = frozenset({"danjuan_not_listed"})
+# F-phase: insufficient_history lands in the same "special / age-gated" bucket
+# as history_lt_3y -- it is the per-fund, inception-date-verified twin of the
+# plan-time history_lt_3y skip.
 SKIPPED_SPECIAL_REASONS: frozenset[str] = frozenset(
-    {"special_caliber", "unknown_type", "history_lt_3y"}
+    {"special_caliber", "unknown_type", "history_lt_3y", "insufficient_history"}
 )
 SKIPPED_QUALITY_REASONS: frozenset[str] = frozenset({"quality_failed"})
 TERMINAL_RECONCILIATION_REASON: str = "reconciliation_mismatch"
@@ -91,7 +95,8 @@ def _bucket_counts(conn: sqlite3.Connection) -> dict[str, int]:
           SUM(CASE WHEN status='skipped' AND reason IN
               ('danjuan_not_listed') THEN 1 ELSE 0 END) AS skipped_secondary,
           SUM(CASE WHEN status='skipped' AND reason IN
-              ('special_caliber','unknown_type','history_lt_3y') THEN 1 ELSE 0 END)
+              ('special_caliber','unknown_type','history_lt_3y',
+               'insufficient_history') THEN 1 ELSE 0 END)
             AS skipped_special,
           SUM(CASE WHEN status='skipped' AND reason='quality_failed' THEN 1 ELSE 0 END)
             AS skipped_quality,
@@ -103,7 +108,8 @@ def _bucket_counts(conn: sqlite3.Connection) -> dict[str, int]:
             AS other_done_unwritten,
           SUM(CASE WHEN status='skipped' AND reason IS NOT NULL AND reason NOT IN
               ('danjuan_not_listed','special_caliber','unknown_type',
-               'history_lt_3y','quality_failed','reconciliation_mismatch')
+               'history_lt_3y','insufficient_history','quality_failed',
+               'reconciliation_mismatch')
               THEN 1 ELSE 0 END) AS other_skipped
         FROM fund_sync_state
         """,
