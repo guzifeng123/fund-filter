@@ -10,13 +10,18 @@ its major class is 指数型:
 
 1. Special caliber first (route ``special_caliber``):
    money-market, on-exchange ETF, QDII commodity/REITs, standalone REITs,
-   commodity. These are never downloaded as ordinary OTC open-end NAV series.
+   commodity, Hong Kong mutual-recognition funds. These are never downloaded
+   as ordinary OTC open-end NAV series.
 2. Secondary / not-sellable shares (route ``unsupported_secondary``):
    broker asset-management ("资管") / custom shares.
 3. Major-class routing: eligible OTC open-end classes
    (股票/混合/债券/指数 incl. ETF-联接 / FOF / ordinary QDII) with >=3y
-   history -> ``supported``; the same classes with <3y -> ``new_short_history``
-   (promotable to ``supported`` when ``include_short_history=True``).
+   history -> ``supported``. Age is three-state: ``has_3y=True`` is confirmed
+   eligible; ``has_3y=None`` (rank-uncovered) is ALSO routed to ``supported`` and
+   its precise >=3y check is deferred to the per-fund runner (which reads the
+   primary source's inception_date); only ``has_3y=False`` (known <3y) routes to
+   ``new_short_history`` (promotable to ``supported`` when
+   ``include_short_history=True``).
 
 ETF-联接 funds are OTC index funds (supported); bare on-exchange ETFs are
 special. A tradeable OTC LOF such as 161725 is treated as an ordinary OTC
@@ -84,6 +89,16 @@ def classify(fund: UniverseFund, *, include_short_history: bool = False) -> Clas
             reason="special_caliber",
             detail={"special_kind": "money_market", "type_detail": fund.type_detail},
         )
+    if "互认" in fund.name:
+        # Hong Kong mutual-recognition funds are not ordinary mainland OTC
+        # open-end NAV series. The current fund_name_em feed carries no 互认
+        # marker (observed 0 rows); the rule is kept so any future rows are
+        # routed auditablely instead of silently slipping through.
+        return ClassifyDecision(
+            route="special_caliber",
+            reason="special_caliber",
+            detail={"special_kind": "hk_mutual_recognition", "type_detail": fund.type_detail},
+        )
     if major == "REITs":
         return ClassifyDecision(
             route="special_caliber",
@@ -126,22 +141,34 @@ def classify(fund: UniverseFund, *, include_short_history: bool = False) -> Clas
             detail={"type_major": major, "type_detail": fund.type_detail},
         )
 
-    if fund.has_3y:
+    if fund.has_3y is True:
         return ClassifyDecision(
             route="supported",
             reason="eligible_open_end",
-            detail={"type_major": major, "type_detail": fund.type_detail},
+            detail={"type_major": major, "type_detail": fund.type_detail, "age_evidence": "confirmed"},
         )
 
-    # Eligible class but insufficient history.
+    # Rank-uncovered funds have no age evidence (has_3y is None). They must NOT
+    # be written off as new_short_history here: they become supported candidates
+    # and the precise ">=3y" check is deferred to the per-fund runner, which reads
+    # the primary source's inception_date.
+    if fund.has_3y is None:
+        return ClassifyDecision(
+            route="supported",
+            reason="eligible_open_end",
+            detail={"type_major": major, "type_detail": fund.type_detail, "age_evidence": "unknown"},
+        )
+
+    # has_3y is False: eligible class but known short history (rank row, blank
+    # 近3年). Promotable to supported when the short-history switch is on.
     if include_short_history:
         return ClassifyDecision(
             route="supported",
             reason="short_history_included",
-            detail={"type_major": major, "type_detail": fund.type_detail},
+            detail={"type_major": major, "type_detail": fund.type_detail, "age_evidence": "short"},
         )
     return ClassifyDecision(
         route="new_short_history",
         reason="history_lt_3y",
-        detail={"type_major": major, "type_detail": fund.type_detail},
+        detail={"type_major": major, "type_detail": fund.type_detail, "age_evidence": "short"},
     )

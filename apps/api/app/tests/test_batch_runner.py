@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
+import pytest
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -254,6 +255,50 @@ def test_danjuan_not_listed_is_skipped_and_not_staged(tmp_path: Path) -> None:
     promoted = db.get(Fund, bad_code)
     assert promoted is not None
     assert promoted.snapshot_generation_id == LEGACY_SNAPSHOT_GENERATION_ID
+
+
+def test_young_inception_is_skipped_insufficient_history_and_not_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F-phase: the precise >=3y check runs here, per fund. A fund founded <3y
+    (and short-history off) is skipped as insufficient_history -- never staged,
+    never promoted, never written."""
+    monkeypatch.setattr(settings, "fund_batch_include_short_history", False)
+    db = _make_db()
+    old = FUNDS[0]  # inception 2018-03-15, well over 3y
+    young = FUNDS[1].model_copy(update={"inception_date": "2025-06-01"})  # <3y
+    codes = [old.code, young.code]
+    fetcher = FakeFetcher({old.code: old, young.code: young})
+
+    with BatchState(tmp_path / "s.db") as state:
+        _plan(state, codes)
+        summary = _runner(db, state, fetcher, FakeRecon()).run(batch_size=50)
+
+    assert summary.passed == 1  # only the old fund promotes
+    assert summary.skipped == 1
+    state2 = BatchState(tmp_path / "s.db")
+    row = state2._conn.execute(  # noqa: SLF001
+        "SELECT status, reason FROM fund_sync_state WHERE code=?", (young.code,)
+    ).fetchone()
+    assert row["status"] == "skipped"
+    assert row["reason"] == "insufficient_history"
+    # The young fund must NOT be written into a new generation.
+    fund_row = db.get(Fund, young.code)
+    assert fund_row is None or fund_row.snapshot_generation_id == LEGACY_SNAPSHOT_GENERATION_ID
+
+
+def test_young_inception_passes_when_short_history_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "fund_batch_include_short_history", True)
+    db = _make_db()
+    young = FUNDS[0].model_copy(update={"inception_date": "2025-06-01"})
+    fetcher = FakeFetcher({young.code: young})
+    with BatchState(tmp_path / "s.db") as state:
+        _plan(state, [young.code])
+        summary = _runner(db, state, fetcher, FakeRecon()).run(batch_size=50)
+    assert summary.passed == 1
+    assert summary.skipped == 0
 
 
 def test_reconciliation_mismatch_is_isolated_others_promote(tmp_path: Path) -> None:
