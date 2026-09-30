@@ -32,6 +32,7 @@ BASE_INFO: dict[str, Any] = {
     "YSC": "2284",
 }
 PROFILE_HTML = (
+    "<p><label>成立日期：<span>2001-12-18</span></label></p>"
     "<tr><th>管理费率</th><td>1.20%（每年）</td>"
     "<th>托管费率</th><td>0.20%（每年）</td></tr>"
 )

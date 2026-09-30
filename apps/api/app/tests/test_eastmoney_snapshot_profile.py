@@ -63,7 +63,11 @@ def raw_snapshot(profile_html: str | None = None) -> EastmoneyRawSnapshot:
         base_info=base_info,
         nav_rows=nav_rows,
         profile_html=profile_html
-        or "<tr><th>管理费率</th><td>1.20%（每年）</td><th>托管费率</th><td>0.20%（每年）</td></tr>",
+        or (
+            "<p><label>成立日期：<span>2001-12-18</span></label></p>"
+            "<tr><th>管理费率</th><td>1.20%（每年）</td>"
+            "<th>托管费率</th><td>0.20%（每年）</td></tr>"
+        ),
         manager_html="<tbody><tr><td>2024-12-26</td><td>至今</td><td>郑晓辉 刘睿聪</td></tr></tbody>",
     )
 
@@ -74,6 +78,9 @@ def test_eastmoney_profile_builds_auditable_fund_snapshot() -> None:
     assert fund.code == "000001"
     assert fund.fund_type == "mixed"
     assert fund.risk_level == "R4"
+    # Inception must be the F10 establishment date (2001-12-18), never the
+    # mobile payload's offer-start date ISSBDATE (2001-11-28).
+    assert fund.inception_date == "2001-12-18"
     assert fund.fund_size_billion == 26.443
     assert fund.management_fee == 1.2
     assert fund.custody_fee == 0.2
@@ -95,6 +102,20 @@ def test_eastmoney_profile_rejects_missing_fee_instead_of_fabricating_it() -> No
     with pytest.raises(ValueError, match="托管费率"):
         build_fund_snapshot(
             raw_snapshot("<tr><th>管理费率</th><td>1.20%（每年）</td></tr>"),
+            datetime(2026, 7, 13, tzinfo=timezone.utc),
+        )
+
+
+def test_eastmoney_profile_rejects_missing_inception_instead_of_offer_start() -> None:
+    # Both fees present but the F10 establishment date is absent: must fail
+    # loudly rather than silently falling back to ISSBDATE (offer-start date).
+    html = (
+        "<tr><th>管理费率</th><td>1.20%（每年）</td>"
+        "<th>托管费率</th><td>0.20%（每年）</td></tr>"
+    )
+    with pytest.raises(ValueError, match="成立日期"):
+        build_fund_snapshot(
+            raw_snapshot(html),
             datetime(2026, 7, 13, tzinfo=timezone.utc),
         )
 

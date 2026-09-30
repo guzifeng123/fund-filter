@@ -92,6 +92,29 @@ def _parse_manager_start(text: str) -> date:
     return date.fromisoformat(match.group(1))
 
 
+def _parse_inception_date(text: str) -> date:
+    """Parse the fund establishment (contract-effective) date from the F10 page.
+
+    The mobile ``FundBaseTypeInformation`` payload only exposes ``ISSBDATE``,
+    which is the public offer *start* date (发行日期), not the fund's inception
+    date. The F10 overview publishes the real establishment date both in the
+    header badge (``成立日期：<span>YYYY-MM-DD</span>``) and in the info table
+    (``成立日期/规模`` = ``YYYY年MM月DD日 / ...``). Cross-source checks compare
+    against this date (danjuan ``found_date`` matches it exactly).
+    """
+    header = re.search(r"成立日期[：:]\s*<span>\s*(\d{4}-\d{2}-\d{2})\s*</span>", text)
+    if header is not None:
+        return date.fromisoformat(header.group(1))
+    table = re.search(
+        r"成立日期/规模</th>\s*<td>\s*(\d{4})年(\d{1,2})月(\d{1,2})日",
+        text,
+    )
+    if table is not None:
+        return date(int(table.group(1)), int(table.group(2)), int(table.group(3)))
+    raise ValueError("eastmoney profile page is missing the establishment date (成立日期)")
+
+
+
 def _normalize_fund_type(value: str) -> FundType:
     for prefix, normalized in FUND_TYPE_PREFIXES.items():
         if value.startswith(prefix):
@@ -174,6 +197,9 @@ def build_fund_snapshot(raw: EastmoneyRawSnapshot, generated_at: datetime) -> Fu
         raise ValueError(f"unsupported eastmoney risk level: {base['RISKLEVEL']}")
     management_fee = _parse_percent(raw.profile_html, "管理费率")
     custody_fee = _parse_percent(raw.profile_html, "托管费率")
+    # Real fund establishment date from the F10 overview; ISSBDATE in the mobile
+    # base payload is only the offer-start date and must not be used here.
+    inception = _parse_inception_date(raw.profile_html)
     annualized_return_3y = round(_annualized_return(navs, 3), 4)
     annualized_return_5y = round(_annualized_return(navs, 5), 4)
     max_drawdown = round(_max_drawdown(navs), 4)
@@ -187,7 +213,7 @@ def build_fund_snapshot(raw: EastmoneyRawSnapshot, generated_at: datetime) -> Fu
         fund_type=_normalize_fund_type(str(_required(base, "FTYPE"))),
         risk_level=risk_level,
         manager_name=str(_required(base, "JJJL")),
-        inception_date=str(_required(base, "ISSBDATE"))[:10],
+        inception_date=str(inception),
         fund_size_billion=round(float(_required(base, "ENDNAV")) / 100_000_000, 4),
         management_fee=management_fee,
         custody_fee=custody_fee,
@@ -218,7 +244,7 @@ def build_fund_snapshot(raw: EastmoneyRawSnapshot, generated_at: datetime) -> Fu
         manager_profile=ManagerProfile(
             name=str(_required(base, "JJJL")),
             years=manager_years,
-            inception_date=str(_required(base, "ISSBDATE"))[:10],
+            inception_date=str(inception),
             explanation="管理年限按公开基金经理页当前任期起始日至最新净值日的完整年数计算。",
         ),
         metric_explanations=[
