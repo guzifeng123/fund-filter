@@ -176,58 +176,64 @@ class BatchState:
         now = self._now()
         pending_index = 0
         staged = 0
-        for fund in sorted(records, key=lambda item: item.code):
-            decision = decisions[fund.code]
-            if decision.route == "supported":
-                status = "pending"
-            elif decision.route == "new_short_history" and include_short_history:
-                status = "pending"
-            else:
-                status = "skipped"
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            for fund in sorted(records, key=lambda item: item.code):
+                decision = decisions[fund.code]
+                if decision.route == "supported":
+                    status = "pending"
+                elif decision.route == "new_short_history" and include_short_history:
+                    status = "pending"
+                else:
+                    status = "skipped"
 
-            if status == "pending":
-                batch_no = pending_index // self.batch_size
-                shard = pending_index % shards
-                seq = pending_index
-                pending_index += 1
-                staged += 1
-            else:
-                batch_no = None
-                shard = None
-                seq = None
+                if status == "pending":
+                    batch_no = pending_index // self.batch_size
+                    shard = pending_index % shards
+                    seq = pending_index
+                    pending_index += 1
+                    staged += 1
+                else:
+                    batch_no = None
+                    shard = None
+                    seq = None
 
-            self._conn.execute(
-                """
-                INSERT INTO fund_sync_state
-                  (code, route, fund_type, has_3y, name, status, reason,
-                   batch_no, shard, seq, attempts, first_seen_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-                ON CONFLICT(code) DO UPDATE SET
-                  route=excluded.route,
-                  fund_type=excluded.fund_type,
-                  has_3y=excluded.has_3y,
-                  name=excluded.name,
-                  reason=excluded.reason,
-                  batch_no=excluded.batch_no,
-                  shard=excluded.shard,
-                  seq=excluded.seq,
-                  updated_at=excluded.updated_at
-                """,
-                (
-                    fund.code,
-                    decision.route,
-                    fund.type_major,
-                    1 if fund.has_3y is True else (0 if fund.has_3y is False else None),
-                    fund.name,
-                    status,
-                    decision.reason,
-                    batch_no,
-                    shard,
-                    seq,
-                    now,
-                    now,
-                ),
-            )
+                self._conn.execute(
+                    """
+                    INSERT INTO fund_sync_state
+                      (code, route, fund_type, has_3y, name, status, reason,
+                       batch_no, shard, seq, attempts, first_seen_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                    ON CONFLICT(code) DO UPDATE SET
+                      route=excluded.route,
+                      fund_type=excluded.fund_type,
+                      has_3y=excluded.has_3y,
+                      name=excluded.name,
+                      reason=excluded.reason,
+                      batch_no=excluded.batch_no,
+                      shard=excluded.shard,
+                      seq=excluded.seq,
+                      updated_at=excluded.updated_at
+                    """,
+                    (
+                        fund.code,
+                        decision.route,
+                        fund.type_major,
+                        1 if fund.has_3y is True else (0 if fund.has_3y is False else None),
+                        fund.name,
+                        status,
+                        decision.reason,
+                        batch_no,
+                        shard,
+                        seq,
+                        now,
+                        now,
+                    ),
+                )
+        except Exception:
+            self._conn.execute("ROLLBACK")
+            raise
+        self._conn.commit()
         return staged
 
     # ------------------------------------------------------------------ claim
