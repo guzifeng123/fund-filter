@@ -92,6 +92,28 @@ python scripts/batch_incremental_plan.py            # 先看计划规模
 # 由 D2 runner 消费计划并执行；D4 侧每批结束调用 aggregate_report 落报告。
 ```
 
+### 3.4 全量单代发布（coalesced generation，G 阶段，默认开启）
+
+全量约 354 批，而应用读数据只认 `fund_data_snapshot_state.active_generation_id` 指向的**唯一 active 代**。
+若"每批各建并晋升一个独立代"，全量跑完后对外只剩最后一批（约 21 只），前 353 批虽物理在表却不可见。
+
+`FUND_BATCH_COALESCE_GENERATION`（默认 `true`，CLI 可 `--coalesce / --no-coalesce`）把**整轮全量累积进
+同一个 generation**：
+
+- 每批通过的基金 `stage` 进同一个 job 代并提交，状态为 `staging`，**对在线读不可见**，active 指针不动；
+- 只有当 checkpoint 的 `pending` 真正清零（某次运行 `claim` 返回空）时，才刷新计数 → 校验 → **一次性晋升**
+  该代为 active，并写**一条** job 级 `JobRun`（计数取代内真实行数 + checkpoint 终态，跨多次续传仍准确）；
+- 代 id 持久化在 checkpoint 的 `batch_meta`（键 `coalesce_gen:<job_id>`）。进程崩溃或 `--max-batches`
+  暂停后，用**同一个 `--job-id`** 重跑会重新挂回该 staging 代继续累积，不会另起代；
+- `--max-batches N` 只是"提前暂停观察"，**不会发布**（active 仍是上一代），必须续跑到耗尽才发布。
+  因此灰度与全量应使用**同一个固定 `--job-id`**：灰度就是该全量代的前若干批；不要为灰度单独起 job，
+  否则灰度那批基金会挂在永不发布的 staging 代，且在最终全量代中缺失；
+- 全程 0 只通过（纯失败）时不会创建/晋升空代；收尾校验失败会保持上一代 active，staging 代与 meta
+  保留，修正后续传可重试收尾；
+- `--no-coalesce` 保留旧"每批一代"语义，仅用于每批本身就是一份完整快照的独立小批量场景。
+
+全量建议从**空业务库**起步（见 1.2），使发布的 coalesced 全量代成为唯一基线。
+
 ---
 
 ## 4. 断点续传 / 重试 / 超时回收

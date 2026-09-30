@@ -236,6 +236,49 @@ class BatchState:
         self._conn.commit()
         return staged
 
+    # ---------------------------------------------------- coalesced job meta
+    def get_meta(self, key: str) -> str | None:
+        row = self._conn.execute(
+            "SELECT value FROM batch_meta WHERE key=?", (key,)
+        ).fetchone()
+        return None if row is None else str(row[0])
+
+    def put_meta(self, key: str, value: str) -> None:
+        self._conn.execute(
+            "INSERT INTO batch_meta(key, value) VALUES(?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, value),
+        )
+
+    def delete_meta(self, key: str) -> None:
+        self._conn.execute("DELETE FROM batch_meta WHERE key=?", (key,))
+
+    def get_coalesced_generation(self, job_id: str) -> str | None:
+        """Return the in-flight coalesced generation for a job, if resuming one."""
+        return self.get_meta(f"coalesce_gen:{job_id}")
+
+    def set_coalesced_generation(self, job_id: str, generation_id: str) -> None:
+        self.put_meta(f"coalesce_gen:{job_id}", generation_id)
+
+    def clear_coalesced_generation(self, job_id: str) -> None:
+        self.delete_meta(f"coalesce_gen:{job_id}")
+
+    def terminal_skipped(self, limit: int = 200) -> list[tuple[str, str | None]]:
+        rows = self._conn.execute(
+            "SELECT code, reason FROM fund_sync_state "
+            "WHERE status='skipped' ORDER BY code LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [(str(r["code"]), r["reason"]) for r in rows]
+
+    def terminal_failed(self, limit: int = 200) -> list[tuple[str, str | None]]:
+        rows = self._conn.execute(
+            "SELECT code, last_error FROM fund_sync_state "
+            "WHERE status='failed' ORDER BY code LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [(str(r["code"]), r["last_error"]) for r in rows]
+
     # ------------------------------------------------------------------ claim
     def claim_batch(
         self,

@@ -135,6 +135,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--job-id", type=str, default="batch-sync")
     parser.add_argument("--state-db", type=Path, default=None, help="override checkpoint SQLite path")
     parser.add_argument("--max-batches", type=int, default=None, help="optional cap on batches processed")
+    parser.add_argument(
+        "--coalesce",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "coalesce the whole (resumable) job into ONE generation, published only "
+            "after pending is exhausted; --max-batches pauses without publishing. "
+            "Default follows FUND_BATCH_COALESCE_GENERATION (on); --no-coalesce keeps "
+            "the legacy one-generation-per-batch behaviour"
+        ),
+    )
     args = parser.parse_args(argv)
 
     workers = args.workers if args.workers is not None else settings.fund_batch_workers
@@ -171,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
             batch_size=settings.fund_batch_size,
             max_batches=args.max_batches,
             dry_run=args.dry_run,
+            coalesce=args.coalesce,
         )
         print(
             f"batches={summary.batches} claimed={summary.claimed} "

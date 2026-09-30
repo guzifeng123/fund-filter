@@ -502,3 +502,157 @@ def test_rerun_same_batch_is_idempotent_no_duplicate_nav_rows(tmp_path: Path) ->
 
 def test_default_workers_is_one() -> None:
     assert settings.fund_batch_workers == 1
+
+
+# --------------------------------------------------------------------------- #
+# G-stage: coalesced full-market generation (one job -> one published gen)
+# --------------------------------------------------------------------------- #
+def _synthetic_fund(code: str) -> FundDetail:
+    return FUNDS[0].model_copy(deep=True, update={"code": code, "name": f"基金{code}"})
+
+
+def _six_codes() -> list[str]:
+    return [f"90000{i}" for i in range(1, 7)]
+
+
+def _active_generation(db: Session) -> str:
+    state_row = db.get(FundDataSnapshotState, SNAPSHOT_STATE_ROW_ID)
+    assert state_row is not None
+    return state_row.active_generation_id
+
+
+def _active_visible_count(db: Session) -> tuple[str, int]:
+    active_id = _active_generation(db)
+    count = db.scalar(
+        select(func.count())
+        .select_from(Fund)
+        .where(Fund.snapshot_generation_id == active_id)
+    )
+    return active_id, int(count or 0)
+
+
+def test_coalesced_multibatch_publishes_single_generation_exposing_all_funds(
+    tmp_path: Path,
+) -> None:
+    """The G-stage fix: three batches accumulate into ONE generation whose active
+    pointer exposes all six funds -- not only the final batch's two."""
+    db = _make_db()
+    codes = _six_codes()
+    fetcher = FakeFetcher({c: _synthetic_fund(c) for c in codes})
+
+    with BatchState(tmp_path / "s.db") as state:
+        _plan(state, codes)
+        summary = _runner(db, state, fetcher, FakeRecon()).run(batch_size=2)
+
+    assert summary.batches == 3
+    assert summary.passed == 6
+    assert len(summary.generations) == 1
+    generation_id = summary.generations[0]
+
+    active_id, visible = _active_visible_count(db)
+    assert active_id == generation_id
+    assert visible == 6
+
+    new_snaps = [
+        s
+        for s in db.scalars(select(FundDataSnapshot)).all()
+        if s.generation_id != LEGACY_SNAPSHOT_GENERATION_ID
+    ]
+    assert len(new_snaps) == 1
+    assert new_snaps[0].generation_id == generation_id
+    assert new_snaps[0].status == "active"
+    assert (new_snaps[0].fund_count, new_snaps[0].metric_count) == (6, 6)
+    # Coalescing meta is cleared after publish.
+    assert BatchState(tmp_path / "s.db").get_coalesced_generation("test-job") is None
+
+
+def test_legacy_per_batch_mode_still_promotes_one_generation_per_batch(
+    tmp_path: Path,
+) -> None:
+    """coalesce=False locks the legacy contract: one generation per batch, whose
+    last-batch-only active visibility is exactly the bug coalescing removes."""
+    db = _make_db()
+    codes = _six_codes()
+    fetcher = FakeFetcher({c: _synthetic_fund(c) for c in codes})
+
+    with BatchState(tmp_path / "s.db") as state:
+        _plan(state, codes)
+        summary = _runner(db, state, fetcher, FakeRecon()).run(
+            batch_size=2, coalesce=False
+        )
+
+    assert summary.batches == 3
+    assert len(summary.generations) == 3
+    _, visible = _active_visible_count(db)
+    assert visible == 2  # only the final batch is visible in the legacy model
+
+
+def test_coalesced_pause_then_resume_reattaches_and_publishes_all(tmp_path: Path) -> None:
+    db = _make_db()
+    codes = _six_codes()
+    fetcher = FakeFetcher({c: _synthetic_fund(c) for c in codes})
+    state_path = tmp_path / "s.db"
+
+    # First process run: cap at one batch -> pause WITHOUT publishing.
+    with BatchState(state_path) as state:
+        _plan(state, codes)
+        first = _runner(db, state, fetcher, FakeRecon()).run(batch_size=2, max_batches=1)
+    assert first.batches == 1
+    assert first.generations == []
+    assert _active_generation(db) == LEGACY_SNAPSHOT_GENERATION_ID
+
+    staging_id = BatchState(state_path).get_coalesced_generation("test-job")
+    assert staging_id is not None
+    staging = db.get(FundDataSnapshot, staging_id)
+    assert staging is not None
+    assert staging.status == "staging"
+
+    # Restart with a fresh checkpoint connection (same business DB); run to done.
+    with BatchState(state_path) as state2:
+        second = _runner(db, state2, fetcher, FakeRecon()).run(batch_size=2)
+
+    # This process only handled the four remaining codes ...
+    assert second.passed == 4
+    # ... but the single published generation holds all six.
+    assert len(second.generations) == 1
+    active_id, visible = _active_visible_count(db)
+    assert active_id == staging_id == second.generations[0]
+    assert visible == 6
+    published = db.get(FundDataSnapshot, staging_id)
+    assert published is not None and published.status == "active"
+    assert published.fund_count == 6
+
+    # NAV rows are not duplicated by re-attaching to the same generation.
+    nav_count = db.scalar(
+        select(func.count()).select_from(FundNav).where(FundNav.fund_code == codes[0])
+    )
+    assert nav_count == len(FUNDS[0].navs)
+    assert BatchState(state_path).get_coalesced_generation("test-job") is None
+
+
+def test_coalesced_finalize_validation_failure_keeps_previous_active(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import app.jobs.batch_runner as br
+
+    def boom(db: Session, snapshot: FundDataSnapshot) -> None:
+        raise RuntimeError("simulated staged-snapshot validation failure")
+
+    monkeypatch.setattr(br, "validate_staged_snapshot", boom)
+
+    db = _make_db()
+    codes = _six_codes()[:2]
+    fetcher = FakeFetcher({c: _synthetic_fund(c) for c in codes})
+    with BatchState(tmp_path / "s.db") as state:
+        _plan(state, codes)
+        with pytest.raises(RuntimeError, match="validation failure"):
+            _runner(db, state, fetcher, FakeRecon()).run(batch_size=2)
+
+    db.rollback()
+    # No half switch: the legacy generation stays active.
+    assert _active_generation(db) == LEGACY_SNAPSHOT_GENERATION_ID
+    # The staging generation and its meta survive so a resume can retry finalize.
+    staging_id = BatchState(tmp_path / "s.db").get_coalesced_generation("test-job")
+    assert staging_id is not None
+    staging = db.get(FundDataSnapshot, staging_id)
+    assert staging is not None and staging.status == "staging"
