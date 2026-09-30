@@ -267,7 +267,9 @@ def name_matches(a: str | None, b: str | None) -> bool:
     base_b = _base_name(nb)
     if not base_a or not base_b:
         return False
-    return base_a in base_b or base_b in base_a
+    compact_a = base_a.replace(" ", "")
+    compact_b = base_b.replace(" ", "")
+    return compact_a in compact_b or compact_b in compact_a
 
 
 def _contains(a: str | None, b: str | None) -> bool:
@@ -364,16 +366,18 @@ def map_fund_type(*raw_types: str | None) -> str:
         return "fof"
     if "lof" in text:
         return "lof"
-    if "etf" in text:
+    if "etf" in text or "交易型开放式" in text:
         return "etf"
     if "指数" in text or "被动" in text:
         return "index"
     if "债券" in text or "纯债" in text or "固收" in text or "转债" in text:
         return "bond"
-    if "股票" in text or "偏股" in text:
-        return "stock"
+    # Broad-asset order matters: "混合型-偏股" / "偏股混合型" are hybrid funds,
+    # so the 混合 bucket is tested before the pure-stock bucket.
     if "混合" in text or "灵活配置" in text or "平衡" in text:
         return "mixed"
+    if "股票" in text or "偏股" in text:
+        return "stock"
     return "other"
 
 
