@@ -1,0 +1,357 @@
+{
+  "url": "https://danjuanfunds.com/djapi/fund/002910",
+  "body": {
+    "data": {
+      "fd_code": "002910",
+      "fd_type": "3",
+      "fd_name": "易方达供给改革混合",
+      "fd_full_name": "易方达供给改革灵活配置混合型证券投资基金",
+      "found_date": "2017-01-25",
+      "fd_status": "1",
+      "declare_status": "1",
+      "subscribe_status": "0",
+      "withdraw_status": "1",
+      "auto_invest_status": "1",
+      "totshare": "140.76亿",
+      "keeper_name": "易方达基金管理有限公司",
+      "manager_name": "杨宗昌",
+      "trup_name": "中国银行股份有限公司",
+      "sale_status": "1",
+      "risk_level": "4",
+      "ipo_start_date": 1480608000000,
+      "ipo_end_date": 1484841600000,
+      "fund_status": "0",
+      "fund_derived": {
+        "end_date": "2026-09-29",
+        "unit_nav": "7.8755",
+        "nav_grtd": "0.103",
+        "nav_grl1m": "-6.6894942003",
+        "nav_grl3m": "-6.534458409",
+        "nav_grl6m": "95.0298407667",
+        "nav_grlty": "113.7235745882",
+        "nav_grl1y": "146.7571124201",
+        "nav_grl3y": "189.8068077277",
+        "nav_grl5y": "245.15931104",
+        "nav_grbase": "687.55",
+        "srank_l1m": "1734/2107",
+        "srank_l3m": "973/2091",
+        "srank_l6m": "1/2087",
+        "srank_lty": "1/2109",
+        "srank_l1y": "1/2076",
+        "srank_l3y": "32/1944",
+        "srank_l5y": "11/1711",
+        "nav_growth": "0.0079",
+        "annual_performance_list": [
+          {
+            "period": "成立以来",
+            "nav": "687.55",
+            "rank": "20/2109"
+          },
+          {
+            "period": "今年以来",
+            "nav": "113.72",
+            "rank": "1/2109"
+          },
+          {
+            "period": "2025",
+            "nav": "48.00",
+            "rank": "329/2142"
+          },
+          {
+            "period": "2024",
+            "nav": "-3.47",
+            "rank": "1660/2138"
+          },
+          {
+            "period": "2023",
+            "nav": "-0.15",
+            "rank": "435/2125"
+          },
+          {
+            "period": "2022",
+            "nav": "4.44",
+            "rank": "42/2021"
+          },
+          {
+            "period": "2021",
+            "nav": "40.87",
+            "rank": "90/1909"
+          },
+          {
+            "period": "2020",
+            "nav": "82.34",
+            "rank": "152/1778"
+          },
+          {
+            "period": "2019",
+            "nav": "22.32",
+            "rank": "947/1679"
+          },
+          {
+            "period": "2018",
+            "nav": "-24.98",
+            "rank": "1314/1566"
+          },
+          {
+            "period": "2017",
+            "nav": "4.94",
+            "rank": "855/1316"
+          }
+        ],
+        "yield_history": [
+          {
+            "yield": "-6.53",
+            "name": "近3个月"
+          },
+          {
+            "yield": "95.03",
+            "name": "近6个月"
+          },
+          {
+            "yield": "146.76",
+            "name": "近一年"
+          },
+          {
+            "yield": "228.46",
+            "name": "近两年"
+          },
+          {
+            "yield": "189.81",
+            "name": "近三年"
+          },
+          {
+            "yield": "245.16",
+            "name": "近五年"
+          },
+          {
+            "yield": "687.55",
+            "name": "成立以来"
+          }
+        ]
+      },
+      "fund_rates": {
+        "subscribe_rate": "1.2",
+        "declare_rate": "1.5",
+        "discount": "0.1",
+        "subscribe_discount": "1",
+        "declare_discount": "0.1"
+      },
+      "op_fund": {
+        "fund_tags": [
+          {
+            "category": "1",
+            "name": "混合型-灵活配置"
+          },
+          {
+            "category": "9",
+            "name": "中高风险"
+          }
+        ]
+      },
+      "yield": "-6.53",
+      "yield_name": "近三个月收益率",
+      "s_rank": "973/2091",
+      "s_rank_name": "季度排名",
+      "growth_day": "30",
+      "sales": "",
+      "tips": "排名 973/2091",
+      "type_desc": "混合型-灵活配置",
+      "rating_desc": "暂无评级",
+      "follower_count": 19580,
+      "status_count": 1000,
+      "agent_sell": true,
+      "trade_reason": {
+        "show_button": false,
+        "withdraw_display": true
+      },
+      "ipo_start_count_down": 1480575601000,
+      "ipo_end_count_down": 1484895600000,
+      "growth_default_period": "ty",
+      "fir_header_base_data": [
+        {
+          "data_name": "年化收益（近5年）",
+          "data_value_str": "+28.12%",
+          "data_value_number": 28.1161616291,
+          "data_have_colour": true
+        },
+        {
+          "data_name": "累计收益",
+          "data_value_str": "+687.55%",
+          "data_value_number": 687.55,
+          "data_have_colour": true
+        },
+        {
+          "data_name": "日涨跌",
+          "data_value_str": "+0.10%",
+          "data_value_number": 0.103,
+          "data_have_colour": true
+        }
+      ],
+      "sec_header_base_data": [
+        {
+          "data_name": "今年以来",
+          "data_value_str": "+113.72%",
+          "data_value_number": 113.7235745882,
+          "data_have_colour": true
+        },
+        {
+          "data_name": "成立时长",
+          "data_value_str": "9年250天",
+          "data_have_colour": false
+        },
+        {
+          "data_name": "最新净值",
+          "data_value_str": "7.8755",
+          "data_value_number": 7.8755,
+          "data_have_colour": false,
+          "data_extend": "09-29"
+        },
+        {
+          "data_name": "最大回撤",
+          "data_value_str": "40.13%",
+          "data_value_number": 0.4013,
+          "data_have_colour": false
+        },
+        {
+          "data_name": "基金经理",
+          "data_value_str": "杨宗昌",
+          "data_have_colour": false
+        },
+        {
+          "data_name": "基金规模",
+          "data_value_str": "140.76亿",
+          "data_have_colour": false
+        }
+      ],
+      "base_data_tip": [
+        {
+          "title": "成立以来年化",
+          "content": "即成立以来年化收益率（复权），是基金成立以来的累计收益率按复利计算的年化值。若基金成立时间不足半年，不具备参考价值，不显示该数据。"
+        },
+        {
+          "title": "最大回撤",
+          "content": "基金成立以来，从任一历史时点往后推，净值走到最低点时的收益率回撤幅度的最大值。最大回撤用来描述买入产品后可能出现的最糟糕情况。通常用来衡量该基金的抗风险能力。"
+        }
+      ],
+      "nav_tab_list": [
+        {
+          "nav_tab_name": "今年以来",
+          "nav_tab_value": "ty",
+          "nav_growth": "113.7235745882"
+        },
+        {
+          "nav_tab_name": "近1月",
+          "nav_tab_value": "1m",
+          "nav_growth": "-6.6894942003"
+        },
+        {
+          "nav_tab_name": "近3月",
+          "nav_tab_value": "3m",
+          "nav_growth": "-6.534458409"
+        },
+        {
+          "nav_tab_name": "近1年",
+          "nav_tab_value": "1y",
+          "nav_growth": "146.7571124201"
+        },
+        {
+          "nav_tab_name": "近6月",
+          "nav_tab_value": "6m",
+          "nav_growth": "95.0298407667"
+        },
+        {
+          "nav_tab_name": "近3年",
+          "nav_tab_value": "3y",
+          "nav_growth": "189.8068077277"
+        },
+        {
+          "nav_tab_name": "近5年",
+          "nav_tab_value": "5y",
+          "nav_growth": "245.15931104"
+        },
+        {
+          "nav_tab_name": "成立以来",
+          "nav_tab_value": "all",
+          "nav_growth": "687.55",
+          "nav_tab_extent": "9年250天"
+        }
+      ],
+      "display_annual_performance": true,
+      "benchmark_index": [
+        {
+          "symbol": "SH000300",
+          "symbol_name": "沪深300指数"
+        },
+        {
+          "symbol": "SH000905",
+          "symbol_name": "中证500指数"
+        },
+        {
+          "symbol": "SH000852",
+          "symbol_name": "中证1000指数"
+        },
+        {
+          "symbol": "SH000016",
+          "symbol_name": "上证50指数"
+        },
+        {
+          "symbol": "SZ399006",
+          "symbol_name": "创业板指数"
+        },
+        {
+          "symbol": "SH000001",
+          "symbol_name": "上证综指"
+        },
+        {
+          "symbol": "SZ399001",
+          "symbol_name": "深证成指"
+        },
+        {
+          "symbol": "CSI930950",
+          "symbol_name": "中证偏股基金指数"
+        },
+        {
+          "symbol": "HKHSI",
+          "symbol_name": "恒生指数"
+        },
+        {
+          "symbol": "CSIH11001",
+          "symbol_name": "中证全债指数"
+        },
+        {
+          "symbol": "CBA00101",
+          "symbol_name": "中债-新综合指数"
+        },
+        {
+          "symbol": "CBA02701",
+          "symbol_name": "中债-信用债总指数"
+        },
+        {
+          "symbol": "CBA00601",
+          "symbol_name": "中债-国债总指数"
+        },
+        {
+          "symbol": "CBA01201",
+          "symbol_name": "中债-金融债券总指数"
+        },
+        {
+          "symbol": "CBA00301",
+          "symbol_name": "中债-总指数"
+        },
+        {
+          "symbol": "CBA00201",
+          "symbol_name": "中债-综合指数"
+        }
+      ],
+      "invest_orientation": "本基金基于定量与定性相结合的宏观及市场分析，确定组合中股票、债券等资产类别的配置比例。\r\n    本基金界定的供给改革主题指“供给侧改革”，即从供给端、生产端出发，进行的经济结构调整，旨在扩大有效供给，提高供给结构适应性和灵活性，提高全要素生产率，使供给体系更好适应需求结构变化，提升经济增长的质量和效率。\r\n    与供给改革主题相关或受益的行业包括的内涵丰富，本基金将自上而下地综合考虑经济周期、产业发展规律、产业政策等因素，进行股票资产在各行业间的配置。\r\n    本基金可投资存托凭证，本基金将结合对宏观经济状况、行业景气度、公司竞争优势、公司治理结构、估值水平等因素的分析判断，选择投资价值高的存托凭证进行投资。\r\n    在债券投资方面，本基金将主要通过类属配置与券种选择两个层次进行投资管理。\r\n    本基金将根据风险管理的原则，主要选择流动性好、交易活跃的股指期货、国债期货合约进行交易，以对冲投资组合的系统性风险、有效管理现金流量或降低建仓或调仓过程中的冲击成本等。",
+      "invest_target": "本基金在控制风险的前提下，追求超越业绩比较基准的投资回报。",
+      "performance_bench_mark": "中证800指数收益率×85%+中债-新综合财富（总值）指数收益率×15%",
+      "record_version": "1",
+      "pension_fund": false,
+      "lock_fund_type": "0",
+      "can_buy": true,
+      "can_pre_buy": false
+    },
+    "result_code": 0
+  }
+}
