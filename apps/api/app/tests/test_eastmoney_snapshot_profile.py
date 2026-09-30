@@ -93,6 +93,15 @@ def test_eastmoney_profile_builds_auditable_fund_snapshot() -> None:
     assert fund.upstream_provider == "eastmoney"
     assert fund.fee_summary is not None
     assert fund.fee_summary.total_fee == 1.4
+    # The raw, un-collapsed eastmobile FTYPE detail is carried as a non-serialized
+    # internal attribute for reconciliation; the stored 4-bucket fund_type is unchanged.
+    assert fund._fund_type_raw == "混合型-灵活"
+    assert fund.fund_type == "mixed"
+    # Private attribute must not leak into the OpenAPI / JSON contract.
+    from app.schemas.funds import FundDetail as _FundDetail
+
+    assert "_fund_type_raw" not in _FundDetail.model_fields
+    assert "_fund_type_raw" not in fund.model_dump(mode="json")
     assert fund.manager_profile is not None
     assert any(metric.key == "sharpe_ratio" and "250" in metric.explanation for metric in fund.metric_explanations)
     assert [point.trade_date for point in fund.navs] == sorted(point.trade_date for point in fund.navs)

@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
 from app.core.nav_dates import normalize_nav_trade_date
 
@@ -98,6 +98,14 @@ class FundDetail(Fund):
     manager_profile: ManagerProfile | None = None
     metric_explanations: list[MetricExplanation] = Field(default_factory=list)
     risk_match: RiskMatchResult | None = None
+
+    # Internal-only, non-serialized mirror of the upstream's raw, un-collapsed fund
+    # type detail (e.g. eastmoney mobile FTYPE "指数型-海外股票" / "FOF-稳健型").
+    # It lets the reconciliation engine collapse the primary and secondary type text
+    # through the same C1 map_fund_type without widening the 4-bucket FundType
+    # storage contract. PrivateAttr keeps it out of model_fields / the OpenAPI
+    # schema / JSON output; other data sources leave it at the default None.
+    _fund_type_raw: str | None = PrivateAttr(default=None)
 
 
 class FundFilterRequest(BaseModel):

@@ -469,3 +469,53 @@ def test_primary_missing_company_custodian_is_skip_not_block(
     # company / custodian one-sided disclosure surfaces as a warning, not a critical.
     assert fund_row["critical"] is False
     assert fund_row["warnings"] >= 1
+
+
+def _type_aligned_isolated(primary_type_raw: str, danjuan_type_desc: str) -> Any:
+    fund = _fund()
+    fund._fund_type_raw = primary_type_raw
+    danjuan_profile = engine.ReconcilableProfile(
+        code=fund.code,
+        name="稳健成长混合A",
+        full_name=None,
+        found_date=date(2018, 3, 15),
+        company="华夏基金管理有限公司",
+        custodian="中国建设银行股份有限公司",
+        managers=["陈安"],
+        fund_type_raw=danjuan_type_desc,
+        benchmark=None,
+        scale_text="43.0亿",
+        rates=None,
+        source="danjuan",
+    )
+    danjuan = FakeDanjuan(navs=_consistent_danjuan_navs(), profile=danjuan_profile)
+    service = ReconciliationService(StubSource([fund]), danjuan, FakeSina(acc=1.02), settings)
+    return service.reconcile_one_fund_isolated(fund).report
+
+
+@pytest.mark.parametrize(
+    ("primary_raw", "danjuan_desc"),
+    [
+        ("指数型-海外股票", "QDII-股票"),
+        ("FOF-稳健型", "FOF-偏债混合"),
+    ],
+)
+def test_overseas_and_fof_types_align_through_raw_detail(
+    primary_raw: str, danjuan_desc: str
+) -> None:
+    report = _type_aligned_isolated(primary_raw, danjuan_desc)
+    fund_type_check = [c for c in report.field_checks if c.field == "fund_type"]
+    assert fund_type_check, "fund_type check must be present"
+    assert fund_type_check[0].match is True
+    assert fund_type_check[0].rule == "fund_type_match"
+    assert report.status == "verified"
+    assert report.critical_failures == []
+
+
+def test_fund_type_raw_falls_back_to_hint_when_unset() -> None:
+    # Other data sources leave _fund_type_raw unset; the 4-bucket hint fallback must
+    # keep the existing mixed-vs-mixed agreement working.
+    report = _type_aligned_isolated("", "混合型-灵活配置")
+    fund_type_check = [c for c in report.field_checks if c.field == "fund_type"]
+    assert fund_type_check[0].match is True
+    assert report.status == "verified"

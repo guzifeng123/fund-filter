@@ -205,6 +205,15 @@ class ReconciliationService:
         return points
 
     def _primary_profile(self, fund: FundDetail) -> engine.ReconcilableProfile:
+        # Prefer the upstream's raw, un-collapsed type detail (eastmoney mobile FTYPE)
+        # carried as a non-serialized private attribute, so the primary and secondary
+        # type text both flow through C1's map_fund_type and collapse to the same
+        # canonical bucket (e.g. "指数型-海外股票" <-> "QDII-股票" -> qdii). Other
+        # data sources leave the private attribute unset; fall back to the 4-bucket
+        # Chinese hint derived from the stored fund_type.
+        primary_type_raw = getattr(fund, "_fund_type_raw", None) or _PRIMARY_TYPE_HINT.get(
+            fund.fund_type, fund.fund_type
+        )
         return engine.ReconcilableProfile(
             code=fund.code,
             name=fund.name,
@@ -220,7 +229,7 @@ class ReconciliationService:
             company=None,
             custodian=None,
             managers=[fund.manager_name] if fund.manager_name else [],
-            fund_type_raw=_PRIMARY_TYPE_HINT.get(fund.fund_type, fund.fund_type),
+            fund_type_raw=primary_type_raw,
             benchmark=None,
             scale_text=f"{fund.fund_size_billion}亿" if fund.fund_size_billion >= 0 else None,
             rates=None,

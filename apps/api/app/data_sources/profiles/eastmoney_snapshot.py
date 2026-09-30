@@ -244,10 +244,11 @@ def build_fund_snapshot(raw: EastmoneyRawSnapshot, generated_at: datetime) -> Fu
     rank_percentile = round(rank / rank_count * 100, 4)
     manager_years = max(0, int((latest_nav_date - manager_start).days / 365.2425))
 
-    return FundDetail(
+    fund_type_detail = str(_required(base, "FTYPE"))
+    fund = FundDetail(
         code=str(_required(base, "FCODE")),
         name=str(_required(base, "SHORTNAME")),
-        fund_type=_normalize_fund_type(str(_required(base, "FTYPE"))),
+        fund_type=_normalize_fund_type(fund_type_detail),
         risk_level=risk_level,
         manager_name=str(_required(base, "JJJL")),
         inception_date=str(inception),
@@ -317,6 +318,11 @@ def build_fund_snapshot(raw: EastmoneyRawSnapshot, generated_at: datetime) -> Fu
             ),
         ],
     )
+    # Carry the raw upstream FTYPE detail as a non-serialized internal attribute so
+    # reconciliation collapses primary/secondary types through the same C1 mapping;
+    # the stored 4-bucket fund_type above is unchanged.
+    fund._fund_type_raw = fund_type_detail
+    return fund
 
 
 class EastmoneySnapshotBuilder:

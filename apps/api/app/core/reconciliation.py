@@ -364,7 +364,11 @@ def map_fund_type(*raw_types: str | None) -> str:
         return "other"
     if "货币" in text:
         return "money"
-    if "qdii" in text:
+    # QDII overseas funds: danjuan spells it "QDII-股票" (lowercases to "qdii"),
+    # while the eastmoney mobile FTYPE uses the Chinese suffix "海外" (e.g.
+    # "指数型-海外股票"). Both must collapse to the same ``qdii`` bucket before the
+    # generic index/stock branches so the two sources agree on overseas funds.
+    if "qdii" in text or "海外" in text:
         return "qdii"
     if "fof" in text:
         return "fof"
