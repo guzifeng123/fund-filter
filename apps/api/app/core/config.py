@@ -326,6 +326,22 @@ def _parse_eastmoney_fund_codes(raw_codes: str) -> tuple[str, ...]:
     return tuple(codes)
 
 
+def _parse_source_names(raw_names: str) -> tuple[str, ...]:
+    """Split a comma-separated source-name list for the reconciliation engine.
+
+    Used for both the required-source and apply-to-source allow-lists; blank
+    entries are dropped and duplicates removed.
+    """
+    names: list[str] = []
+    for raw_name in raw_names.split(","):
+        name = raw_name.strip()
+        if not name:
+            continue
+        if name not in names:
+            names.append(name)
+    return tuple(names)
+
+
 class Settings:
     def __init__(self) -> None:
         self.app_environment = os.getenv("APP_ENVIRONMENT", "development").strip().lower()
@@ -630,6 +646,74 @@ class Settings:
             "FUND_EASTMONEY_ENABLE_HEALTH_CHECK",
             "true",
         )
+
+        # --- C1: multi-source cross-check reconciliation engine -------------
+        # Pure-function gate between C2 (danjuan / sina clients) and C3 (write
+        # gate + API). Offline mirrors (sample_local / csv_local /
+        # public_http_json) are intentionally *not* forced: apply_to_sources
+        # defaults to eastmoney_direct only. sina is always attempted for the
+        # accumulated-NAV point even when it is not a required source.
+        self.fund_reconcile_enabled = _strict_boolean("FUND_RECONCILE_ENABLED", "true")
+        self.fund_reconcile_required_sources = _parse_source_names(
+            os.getenv("FUND_RECONCILE_REQUIRED_SOURCES", "danjuan")
+        )
+        self.fund_reconcile_strict = _strict_boolean("FUND_RECONCILE_STRICT", "true")
+        self.fund_reconcile_nav_abs_tolerance = _positive_finite_float(
+            "FUND_RECONCILE_NAV_ABS_TOLERANCE",
+            "0.0005",
+        )
+        self.fund_reconcile_nav_rel_tolerance = _non_negative_rate_threshold(
+            "FUND_RECONCILE_NAV_REL_TOLERANCE",
+            "0.002",
+        )
+        self.fund_reconcile_acc_nav_abs_tolerance = _positive_finite_float(
+            "FUND_RECONCILE_ACC_NAV_ABS_TOLERANCE",
+            "0.005",
+        )
+        self.fund_reconcile_daily_pct_tolerance = _positive_finite_float(
+            "FUND_RECONCILE_DAILY_PCT_TOLERANCE",
+            "0.3",
+        )
+        self.fund_reconcile_min_nav_coverage = _non_negative_rate_threshold(
+            "FUND_RECONCILE_MIN_NAV_COVERAGE",
+            "0.99",
+        )
+        self.fund_reconcile_profile_major_blocks = _strict_boolean(
+            "FUND_RECONCILE_PROFILE_MAJOR_BLOCKS",
+            "true",
+        )
+        self.fund_reconcile_scale_blocks = _strict_boolean(
+            "FUND_RECONCILE_SCALE_BLOCKS",
+            "false",
+        )
+        self.fund_reconcile_rates_blocks = _strict_boolean(
+            "FUND_RECONCILE_RATES_BLOCKS",
+            "false",
+        )
+        self.fund_reconcile_apply_to_sources = _parse_source_names(
+            os.getenv("FUND_RECONCILE_APPLY_TO_SOURCES", "eastmoney_direct")
+        )
+        self.fund_reconcile_secondary_timeout_seconds = _positive_integer(
+            "FUND_RECONCILE_SECONDARY_TIMEOUT_SECONDS",
+            "15",
+            maximum=300,
+        )
+        self.fund_reconcile_secondary_min_interval_seconds = max(
+            0.0,
+            float(os.getenv("FUND_RECONCILE_SECONDARY_MIN_INTERVAL_SECONDS", "0.5")),
+        )
+        self.fund_reconcile_sina_batch = _strict_boolean(
+            "FUND_RECONCILE_SINA_BATCH",
+            "true",
+        )
+        default_reconcile_dir = (
+            Path(__file__).resolve().parents[4] / "output" / "reconciliation"
+        )
+        self.fund_reconcile_report_dir = Path(
+            os.getenv("FUND_RECONCILE_REPORT_DIR", default_reconcile_dir.as_posix())
+        )
+        if self.fund_reconcile_min_nav_coverage > 1.0:
+            raise ValueError("FUND_RECONCILE_MIN_NAV_COVERAGE must be between 0 and 1")
 
 
 settings = Settings()
