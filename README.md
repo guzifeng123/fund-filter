@@ -111,6 +111,33 @@ python -m app.jobs.seed_sample_data
 python -m app.jobs.seed_sample_data
 ```
 
+### 本地 pgvector PostgreSQL（D 阶段全市场批处理）
+
+除 Docker Compose 外，D 阶段批处理使用一个仓库外数据目录、监听
+`localhost:55432` 的本地 pgvector 实例（trust、无密码）。数据目录默认
+`../pgdata`（可用环境变量 `PG_LOCAL_PGDATA` 覆盖），端口可用 `PG_LOCAL_PORT`
+覆盖。
+
+```bash
+make pg-start     # 幂等：已在运行则直接报告，不重复启动；首次启动自动建 fund_app + vector 扩展
+make pg-status    # 查看 pid/port/DSN
+make pg-migrate   # DATABASE_URL=postgresql+psycopg://postgres@localhost:55432/fund_app 跑 upgrade head
+make pg-stop      # 停止本实例
+```
+
+应用侧通过 `DATABASE_URL` 选择数据库；默认仍为 SQLite（`output/dev/fund.db`），
+切到本地 PG 时显式设置：
+
+```bash
+export DATABASE_URL="postgresql+psycopg://postgres@localhost:55432/fund_app"
+```
+
+**验证全新库迁移回环**（不碰 `fund_app`）：用 psycopg 连维护库 `postgres` 建一个
+临时库，对它跑 `alembic upgrade head → downgrade base → upgrade head`，验证后
+`DROP DATABASE`。`scripts/pg_local.py` 对 `pgserver` 做函数内懒加载；当前 venv
+未装 `pgserver` 时 `pg-start` 会给出安装/改用主仓库 venv 的可操作提示，不会让
+`import app` 依赖它。
+
 ## 本地启动
 
 启动 API：

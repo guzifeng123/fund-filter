@@ -8,7 +8,7 @@
 PYTHON ?= $(CURDIR)/.venv/bin/python
 API_DIR := $(CURDIR)/apps/api
 
-.PHONY: help install migrate seed test lint mypy connectivity sync-eastmoney smoke dev-api
+.PHONY: help install migrate seed test lint mypy connectivity sync-eastmoney smoke dev-api pg-start pg-stop pg-status pg-migrate
 
 help:
 	@echo "Fund-filter developer targets (Linux/macOS):"
@@ -22,6 +22,10 @@ help:
 	@echo "  sync-eastmoney   pull an audited EastMoney snapshot into the local SQLite DB"
 	@echo "  smoke            hit /health and /api/data/status on a locally running API"
 	@echo "  dev-api          start the FastAPI dev server on :8000"
+	@echo "  pg-start         start the local pgvector PostgreSQL on :55432 (idempotent)"
+	@echo "  pg-stop          stop the local pgvector PostgreSQL"
+	@echo "  pg-status        report local PostgreSQL status"
+	@echo "  pg-migrate       apply Alembic migrations to the local PG fund_app DB"
 
 install:
 	npm install
@@ -54,3 +58,22 @@ smoke:
 
 dev-api:
 	cd $(API_DIR) && $(PYTHON) -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# --- Local pgvector PostgreSQL (D-stage full-market batch) -----------------
+# The data dir lives outside the repo at ../pgdata; the cluster binds
+# localhost:55432. `pg-start` is idempotent: an already-running cluster is
+# reported and left alone. pgserver is lazily imported by the script; if it is
+# missing from this venv the script prints an actionable install hint.
+PG_DATABASE_URL ?= postgresql+psycopg://postgres@localhost:55432/fund_app
+
+pg-start:
+	$(PYTHON) scripts/pg_local.py start
+
+pg-stop:
+	$(PYTHON) scripts/pg_local.py stop
+
+pg-status:
+	$(PYTHON) scripts/pg_local.py status
+
+pg-migrate:
+	cd $(API_DIR) && DATABASE_URL=$(PG_DATABASE_URL) $(PYTHON) -m alembic -c alembic.ini upgrade head
