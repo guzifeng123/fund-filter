@@ -11,6 +11,11 @@ from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from app.data_sources.profiles.eastmoney_pingzhong import (
+    PINGZHONG_URL,
+    PingzhongMoneyFundError,
+    parse_pingzhong_navs,
+)
 from app.data_sources.profiles.normalized import NormalizedV1Profile
 from app.schemas.funds import (
     FeeSummary,
@@ -32,8 +37,17 @@ UPSTREAM_PROVIDER = "eastmoney"
 
 FUND_TYPE_PREFIXES: dict[str, FundType] = {
     "股票型": "stock",
+    # OTC index feeder funds (ETF-联接, ordinary 指数型 incl. overseas QDII index
+    # funds) are equity portfolios and collapse into the ``stock`` bucket; the
+    # reconciliation engine re-derives a finer index/qdii bucket from the
+    # secondary type_desc. This only maps the existing mobile FTYPE field onto the
+    # canonical 4-bucket schema -- it does not replace any 资料 endpoint.
+    "指数型": "stock",
     "混合型": "mixed",
     "债券型": "bond",
+    # Fund-of-funds are multi-asset; the canonical schema has no dedicated FOF
+    # bucket, so they map to the balanced ``mixed`` bucket.
+    "FOF": "mixed",
     "货币型": "money",
 }
 RISK_LEVELS: dict[str, RiskLevel] = {
@@ -69,6 +83,10 @@ class EastmoneyRawSnapshot:
     nav_rows: list[dict[str, Any]]
     profile_html: str
     manager_html: str
+    # Diagnostics-only watermark recording which NAV path produced ``nav_rows``
+    # (pingzhong fast path / legacy lsjz fallback / QDII top-up). Carries no data
+    # contract; downstream consumers ignore it.
+    nav_trace: str | None = None
 
 
 def _required(mapping: dict[str, Any], key: str) -> Any:
@@ -120,6 +138,25 @@ def _normalize_fund_type(value: str) -> FundType:
         if value.startswith(prefix):
             return normalized
     raise ValueError(f"unsupported eastmoney fund type: {value}")
+
+
+def _merge_nav_rows(
+    *row_sets: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Merge lsjz/pingzhong-style rows by ``FSRQ``, later sets winning on overlap.
+
+    Rows are keyed by trade date; a row from a later argument replaces an earlier
+    one for the same date (so the fresher lsjz top-up overrides the bundle). The
+    result is sorted ascending by date, with no duplicate rows and no fabricated
+    gaps. Mirrors the on-disk incremental merge in ``eastmoney_direct``.
+    """
+    by_date: dict[str, dict[str, Any]] = {}
+    for row_set in row_sets:
+        for row in row_set:
+            trade_date = row.get("FSRQ")
+            if isinstance(trade_date, str) and trade_date:
+                by_date[trade_date] = row
+    return sorted(by_date.values(), key=lambda row: str(row.get("FSRQ", "")))
 
 
 def _normalize_navs(rows: list[dict[str, Any]]) -> list[NavPoint]:
@@ -321,12 +358,13 @@ class EastmoneySnapshotBuilder:
         effective_start = (
             start_date if start_date is not None else as_of - timedelta(days=5 * 366 + 45)
         )
-        nav_rows = self._read_all_navs(normalized_code, effective_start, as_of)
+        nav_rows, nav_trace = self._read_nav_rows(normalized_code, effective_start, as_of)
         return EastmoneyRawSnapshot(
             base_info=base_info,
             nav_rows=nav_rows,
             profile_html=self._read_text(PROFILE_URL.format(code=normalized_code)),
             manager_html=self._read_text(MANAGER_URL.format(code=normalized_code)),
+            nav_trace=nav_trace,
         )
 
     def write_mirror(self, output_dir: Path, funds: list[FundDetail], generated_at: datetime) -> Path:
@@ -362,6 +400,57 @@ class EastmoneySnapshotBuilder:
             },
         )
         return manifest_path
+
+    def _read_nav_rows(
+        self,
+        code: str,
+        start_date: date,
+        end_date: date,
+    ) -> tuple[list[dict[str, Any]], str]:
+        """Return NAV rows for ``[start_date, end_date]`` via the fast path.
+
+        Preferred path: one pingzhongdata bundle gives the full history in a single
+        request, then a tiny lsjz page tops up the latest 1-2 trading days (QDII
+        overseas NAVs lag the bundle by 1-2 sessions; A-share/mixed/bond bundles are
+        already current, in which case the top-up only re-confirms the last point).
+
+        Fallback path: any pingzhong transport/parse failure degrades to the legacy
+        paginated lsjz pull. Money-fund shape errors propagate (they must never reach
+        this pipeline).
+        """
+        end_iso = end_date.isoformat()
+        start_iso = start_date.isoformat()
+        try:
+            js_text = self._read_text(PINGZHONG_URL.format(code=code))
+            pz_rows = parse_pingzhong_navs(js_text, code)
+        except PingzhongMoneyFundError:
+            raise
+        except Exception as exc:  # network, timeout, or malformed bundle -> lsjz
+            return self._read_all_navs(code, start_date, end_date), (
+                f"pingzhong_fallback:{type(exc).__name__}"
+            )
+
+        window_rows = [
+            row for row in pz_rows if start_iso <= str(row.get("FSRQ", "")) <= end_iso
+        ]
+        if not window_rows:
+            # Bundle parsed cleanly but has nothing inside the requested window
+            # (e.g. a fund whose history starts after start_date); fall back so the
+            # paginated endpoint applies its own start/end semantics.
+            return self._read_all_navs(code, start_date, end_date), "pingzhong_empty_window"
+
+        # Top up the newest points: overseas (QDII) bundles lag lsjz/sina by 1-2
+        # sessions. Pull a small lsjz window starting at the bundle's last trade date
+        # (one page of 20 covers weeks of sessions) and merge by trade date, letting
+        # the fresher lsjz row win on overlap. Never fabricate when the top-up fails;
+        # the bundle series is already complete and contiguous up to its own last date.
+        pz_last = date.fromisoformat(str(window_rows[-1]["FSRQ"]))
+        try:
+            recent_rows = self._read_all_navs(code, pz_last, end_date)
+        except Exception:
+            recent_rows = []
+        merged = _merge_nav_rows(window_rows, recent_rows)
+        return merged, "pingzhong+lsjz_topup"
 
     def _read_all_navs(self, code: str, start_date: date, end_date: date) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
