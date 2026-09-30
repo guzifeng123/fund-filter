@@ -104,6 +104,9 @@ _SOURCE_PREFIX_RE = re.compile(r"^蛋卷(?:基金)?")
 # danjuan "稳健收益债") are deliberately NOT mapped: without independent NAV
 # evidence they must keep blocking.
 _NAME_SYNONYMS: tuple[tuple[str, str], ...] = (
+    # h1: high-confidence cross-source abbreviation variants beyond bond wording.
+    ("定期开放", "定开"),  # fixed-term open bond: "定期开放债券" == "定开债"
+    ("纳斯达克", "纳指"),  # NASDAQ index short form ("纳斯达克100" == "纳指100")
     ("可转债债券", "可转债"),
     ("可转换债券", "可转债"),
     ("纯债债券", "纯债"),
@@ -129,6 +132,41 @@ _BOND_TYPE_SKELETON_TOKENS: tuple[str, ...] = (
     "利率债",
     "信用债",
     "债",
+)
+
+# h1: non-bond *structural / market-marker* wording that one source may include
+# and the other omit without changing fund identity. These are stripped from the
+# name skeleton ONLY behind the softener's full strong-evidence gate (identical
+# daily NAVs, coverage >= 0.99, zero mismatches/criticals, exact found_date, same
+# share class), never at the direct name_matches step.
+#
+# Scope is deliberately narrow and survey-backed:
+#   * fixed-term open mode: "定期开放" / "定开" / "定期" (e.g. "定期债券" vs "债券",
+#     "18个月定开债" vs "18个月定期开放债券");
+#   * index-type marker: "指数" (often omitted in one source's short name,
+#     e.g. "医药100A" vs "医药100指数A");
+#   * QDII market tag: "QDII" (fund_type is cross-checked independently, so the
+#     tag merely being present on one side is not by itself identifying).
+#
+# Deliberately EXCLUDED (must keep blocking even with identical NAVs):
+#   * strategy / marketing words such as "优选" / "增强" / "收益" / "增利";
+#   * on-exchange wrappers "ETF" / "LOF" / "联接";
+#   * FX share markers "美元" / "现汇" / "现钞" / "人民币".
+_STRUCTURE_SKELETON_TOKENS: tuple[str, ...] = (
+    "定期开放",
+    "定开",
+    "定期",
+    "指数",
+    "QDII",
+)
+
+# Every skeleton token, applied longest-first so a longer token is removed before
+# any shorter one it contains (e.g. "可转债" before "债").
+_SKELETON_TOKENS: tuple[str, ...] = tuple(
+    sorted(
+        set(_BOND_TYPE_SKELETON_TOKENS + _STRUCTURE_SKELETON_TOKENS),
+        key=lambda token: (-len(token), token),
+    )
 )
 
 
@@ -350,8 +388,10 @@ def _split_share_class(normalized: str) -> tuple[str, str]:
     """Split an already-normalised name into ``(core_name, share_class)``.
 
     ``share_class`` is ``""`` when no share marker is present. A trailing single
-    ASCII letter is only treated as a share class when it follows a non-ASCII
-    (CJK) character, so English acronym tails (ETF / LOF / QDII) are not bitten.
+    ASCII letter is treated as a share class when it follows a non-ASCII (CJK)
+    character (e.g. "混合A"), at the start, OR an ASCII digit (index-code share
+    classes such as "医药100A" / "沪深300A"); English acronym tails (ETF / LOF /
+    QDII) end in a letter preceded by another letter and are not bitten.
     """
     if not normalized:
         return "", ""
@@ -364,7 +404,7 @@ def _split_share_class(normalized: str) -> tuple[str, str]:
     last = normalized[-1]
     if last in _SHARE_CLASS_LETTERS:
         prev = normalized[-2] if len(normalized) >= 2 else ""
-        if not prev or not prev.isascii():
+        if not prev or not prev.isascii() or prev.isdigit():
             return normalized[:-1], last
     return normalized, ""
 
@@ -393,16 +433,28 @@ def name_matches(a: str | None, b: str | None) -> bool:
 
 
 def _name_skeleton(normalized_core: str) -> str:
-    """Strip every bond-type wording token (longest-first) from a normalised core.
+    """Strip bond-type and structural/market wording tokens to a fixpoint.
 
-    Two names whose skeletons are identical differ *only* in bond-type wording;
-    any marketing coinage or company-prefix drift survives in the skeleton and
-    keeps the names apart.
+    Each pass removes the *longest* token currently present, then restarts from
+    the longest token, repeating until nothing changes. Restarting matters when
+    removing one token exposes another that was interleaved with it, e.g.
+    "信用定期债" -> remove "定期" -> "信用债" -> remove "信用债" -> "" (a single
+    ordered left-to-right pass would leave a residual "信用" and fail to match a
+    side that simply says "信用债").
+
+    Two names whose skeletons are identical differ *only* in high-confidence
+    bond-type / fixed-term / index / QDII marker wording; any marketing coinage
+    ("优选"/"增强"/"收益"), company-prefix drift, FX share wording or on-exchange
+    wrapper survives in the skeleton and keeps the names apart.
     """
     skeleton = normalized_core
-    for token in _BOND_TYPE_SKELETON_TOKENS:
-        skeleton = skeleton.replace(token, "")
-    return skeleton
+    while True:
+        for token in _SKELETON_TOKENS:
+            if token in skeleton:
+                skeleton = skeleton.replace(token, "")
+                break  # a token was removed; restart and match the longest again
+        else:
+            return skeleton
 
 
 def maybe_soften_name_check(
@@ -412,12 +464,14 @@ def maybe_soften_name_check(
     """Downgrade a literal ``name_mismatch`` to a non-blocking
     ``name_mismatch_soft`` warning, *only* when every gate below holds.
 
-    This is a narrow safety net for high-confidence bond-type abbreviation drift
-    (e.g. "可转债" vs "可转换债券" / "纯债" vs "债券") that survived
-    :func:`normalize_fund_name`. It NEVER relaxes company/custodian/type checks
-    and NEVER relaxes a name whose core skeleton differs (a marketing coinage
-    such as an extra "收益", or a management-company prefix drift, stays a hard
-    blocking major mismatch).
+    This is a narrow safety net for high-confidence wording drift that survived
+    :func:`normalize_fund_name`: bond-type abbreviation ("可转债" vs "可转换债券"
+    / "纯债" vs "债券") and, since h1, fixed-term open mode ("定期开放"/"定开"/
+    "定期"), the index marker ("指数") and the QDII market tag. It NEVER relaxes
+    company/custodian/type checks and NEVER relaxes a name whose core skeleton
+    differs (a marketing/strategy coinage such as "优选"/"增强"/"收益", an FX
+    share marker, or a management-company prefix drift stays a hard blocking
+    major mismatch).
 
     Required evidence (all already computed on the report; no new tolerance):
       * the only blocking major disagreement is the name field itself;
@@ -428,7 +482,8 @@ def maybe_soften_name_check(
         sina quote is a warning, not a critical, and so does not block softening);
       * ``found_date`` is an exact match (not skipped, not mismatch);
       * both names disclose the SAME share class;
-      * the two normalised cores share an identical bond-type-stripped skeleton.
+      * the two normalised cores share an identical skeleton after stripping
+        bond-type and structural (fixed-term / index / QDII) wording.
     """
     name_check = next((fc for fc in report.field_checks if fc.field == "name"), None)
     if name_check is None or name_check.rule != "name_mismatch" or name_check.match:
@@ -470,7 +525,8 @@ def maybe_soften_name_check(
         rule="name_mismatch_soft",
         detail=(
             f"name differs literally ({p_raw!r} vs {s_raw!r}) but kept non-blocking: "
-            f"only bond-type wording differs and strong cross-source evidence agrees "
+            f"only high-confidence bond-type/structure wording differs and strong "
+            f"cross-source evidence agrees "
             f"(nav_coverage={report.nav_coverage:.4f}>={cfg.min_nav_coverage}, "
             f"nav_mismatch=0, found_date exact, no critical failure)"
         ),
