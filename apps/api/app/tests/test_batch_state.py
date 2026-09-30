@@ -199,3 +199,72 @@ def test_stats_aggregates(tmp_path: Path) -> None:
         assert stats.pending == 1  # 000002
         assert stats.skipped == 1  # 000003
         assert stats.by_fund_type["混合型"] == 2
+
+
+# ----------------------------------------------------------------- sharded claim
+
+
+def test_shard_assignment_is_deterministic_by_seq_mod_shards(tmp_path: Path) -> None:
+    clock = FakeClock()
+    records = [_fund(f"{i:06d}") for i in range(6)]
+    decisions = {f.code: _decision(f.code, "supported") for f in records}
+    with _state(tmp_path, clock) as state:
+        state.build_plan(records, decisions, shards=3, include_short_history=False)
+        rows = state._conn.execute(  # noqa: SLF001
+            "SELECT code, shard, seq, batch_no FROM fund_sync_state ORDER BY seq"
+        ).fetchall()
+        assert [(r["code"], r["shard"], r["seq"], r["batch_no"]) for r in rows] == [
+            ("000000", 0, 0, 0),
+            ("000001", 1, 1, 0),
+            ("000002", 2, 2, 1),  # batch_size=2: seq 2 starts batch 1
+            ("000003", 0, 3, 1),
+            ("000004", 1, 4, 2),
+            ("000005", 2, 5, 2),
+        ]
+
+
+def test_sharded_claim_is_disjoint_and_covers_all_pending(tmp_path: Path) -> None:
+    clock = FakeClock()
+    records = [_fund(f"{i:06d}") for i in range(9)]
+    decisions = {f.code: _decision(f.code, "supported") for f in records}
+    with _state(tmp_path, clock) as state:
+        state.build_plan(records, decisions, shards=3, include_short_history=False)
+        per_shard = [state.claim_batch(10, f"w{s}", shards=3, shard=s) for s in range(3)]
+        assert sum(len(codes) for codes in per_shard) == 9
+        assert set(per_shard[0]).isdisjoint(per_shard[1])
+        assert set(per_shard[0]).isdisjoint(per_shard[2])
+        assert set(per_shard[1]).isdisjoint(per_shard[2])
+        union = set(per_shard[0]) | set(per_shard[1]) | set(per_shard[2])
+        assert union == {fund.code for fund in records}
+
+
+def test_sharded_timeout_reclaim_stays_within_shard(tmp_path: Path) -> None:
+    clock = FakeClock()
+    records = [_fund(f"{i:06d}") for i in range(4)]
+    decisions = {f.code: _decision(f.code, "supported") for f in records}
+    with _state(tmp_path, clock) as state:
+        state.build_plan(records, decisions, shards=2, include_short_history=False)
+        # shard 0 worker dies while holding its pending rows.
+        held = state.claim_batch(10, "w0", shards=2, shard=0)
+        assert held == ["000000", "000002"]
+        clock.advance(2000)  # past the 1800s claim timeout
+        # shard 1 worker must not reclaim shard 0's timed-out in-flight rows.
+        shard1 = state.claim_batch(10, "w1", shards=2, shard=1)
+        assert set(shard1).isdisjoint(held)
+        # shard 0 worker reclaims exactly its own timed-out rows.
+        shard0 = state.claim_batch(10, "w2", shards=2, shard=0)
+        assert set(shard0) == set(held)
+
+
+def test_shard_validation_rejects_unpaired_and_out_of_range(tmp_path: Path) -> None:
+    clock = FakeClock()
+    records = [_fund("000001")]
+    decisions = {"000001": _decision("000001", "supported")}
+    with _state(tmp_path, clock) as state:
+        state.build_plan(records, decisions, shards=1, include_short_history=False)
+        with pytest.raises(ValueError, match="shards and shard must be provided together"):
+            state.claim_batch(1, "w", shard=0)
+        with pytest.raises(ValueError, match="shards and shard must be provided together"):
+            state.claim_batch(1, "w", shards=2)
+        with pytest.raises(ValueError, match="shard must be in"):
+            state.claim_batch(1, "w", shards=2, shard=2)

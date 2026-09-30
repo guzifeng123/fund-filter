@@ -229,32 +229,63 @@ class BatchState:
         return staged
 
     # ------------------------------------------------------------------ claim
-    def claim_batch(self, batch_size: int, worker_id: str) -> list[str]:
+    def claim_batch(
+        self,
+        batch_size: int,
+        worker_id: str,
+        *,
+        shards: int | None = None,
+        shard: int | None = None,
+    ) -> list[str]:
         """Atomically claim up to ``batch_size`` pending codes for ``worker_id``.
 
         Timed-out ``in_flight`` rows are reclaimed first (attempts++), then the
         next pending batch is marked ``in_flight`` in one immediate transaction.
+
+        Sharded claim (D1): when both ``shards`` and ``shard`` are supplied, only
+        rows :meth:`build_plan` assigned to that shard are claimed, and the
+        timeout reclamation is scoped to the same shard so workers never reclaim or
+        steal another shard's in-flight rows. Calling with exactly one of the two,
+        or a ``shard`` outside ``[0, shards)``, raises. With neither argument the
+        behaviour is identical to the unsharded D0 contract.
         """
+        if (shard is None) != (shards is None):
+            raise ValueError("shards and shard must be provided together")
+        shard_clause = ""
+        shard_params: list[int] = []
+        if shard is not None:
+            assert shards is not None  # narrowed by the paired check above
+            if shards < 1:
+                raise ValueError("shards must be >= 1")
+            if not 0 <= shard < shards:
+                raise ValueError(f"shard must be in [0, {shards}); got {shard}")
+            shard_clause = " AND shard = ?"
+            shard_params = [shard]
+
         now = self._now()
         self._conn.execute("BEGIN IMMEDIATE")
         try:
             self._conn.execute(
-                """
+                f"""
                 UPDATE fund_sync_state
                    SET status='pending',
                        last_error=?
-                 WHERE status='in_flight' AND updated_at < ?
+                 WHERE status='in_flight' AND updated_at < ?{shard_clause}
                 """,
-                (f"reclaimed after timeout (worker={worker_id})", now - self.claim_timeout_seconds),
+                (
+                    f"reclaimed after timeout (worker={worker_id})",
+                    now - self.claim_timeout_seconds,
+                    *shard_params,
+                ),
             )
             rows = self._conn.execute(
-                """
+                f"""
                 SELECT code FROM fund_sync_state
-                 WHERE status='pending'
+                 WHERE status='pending'{shard_clause}
                  ORDER BY batch_no, shard, seq
                  LIMIT ?
                 """,
-                (batch_size,),
+                (*shard_params, batch_size),
             ).fetchall()
             codes = [str(row[0]) for row in rows]
             if codes:
