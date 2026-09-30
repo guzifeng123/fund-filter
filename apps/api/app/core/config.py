@@ -781,6 +781,17 @@ class Settings:
                 default_universe_cache_dir.as_posix(),
             )
         )
+        # Rolling per-job progress reports (report-<job_id>.json) live here.
+        # Separate from the checkpoint state.db; nothing here is on the business DB.
+        default_batch_report_dir = (
+            Path(__file__).resolve().parents[4] / "output" / "batch"
+        )
+        self.fund_batch_report_dir = Path(
+            os.getenv(
+                "FUND_BATCH_REPORT_DIR",
+                default_batch_report_dir.as_posix(),
+            )
+        )
         if self.fund_batch_backoff_cap_seconds < self.fund_batch_backoff_base_seconds:
             raise ValueError(
                 "FUND_BATCH_BACKOFF_CAP_SECONDS must be >= FUND_BATCH_BACKOFF_BASE_SECONDS"
