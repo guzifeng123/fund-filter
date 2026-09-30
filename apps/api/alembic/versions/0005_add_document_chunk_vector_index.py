@@ -6,6 +6,7 @@ Create Date: 2026-07-13 00:00:00.000000
 """
 
 from collections.abc import Sequence
+import re
 
 import sqlalchemy as sa
 from alembic import op
@@ -43,11 +44,32 @@ def _existing_index_definition(bind: sa.Connection) -> str | None:
     ).scalar_one_or_none()
 
 
+def _current_schema(bind: sa.Connection) -> str:
+    value = bind.execute(sa.text("SELECT current_schema()")).scalar_one_or_none()
+    return str(value) if value is not None else "public"
+
+
+def _strip_schema_qualifier(index_definition: str, current_schema: str) -> str:
+    """Normalise PG's schema-qualified table name in ``pg_indexes.indexdef``.
+
+    PostgreSQL 16 renders the table as ``ON public.document_chunks`` while the
+    hand-written ``EXPECTED_INDEX_DEFINITION`` is unqualified (``ON
+    document_chunks``). Both describe the *same* index; only the literal text
+    differs. Strip the ``<current_schema()>.`` table qualifier that immediately
+    follows ``ON`` so the two definitions normalise to the same string. The
+    index row is already filtered to ``schemaname = current_schema()`` above, so
+    this never touches a table that legitimately lives in another schema.
+    """
+    pattern = re.compile(r"(?is)\bON\s+" + re.escape(current_schema) + r"\.")
+    return pattern.sub("ON ", index_definition)
+
+
 def _ensure_expected_index_definition(bind: sa.Connection) -> bool:
     index_definition = _existing_index_definition(bind)
     if index_definition is None:
         return False
-    if _normalize_sql(str(index_definition)) != _normalize_sql(EXPECTED_INDEX_DEFINITION):
+    actual_definition = _strip_schema_qualifier(str(index_definition), _current_schema(bind))
+    if _normalize_sql(actual_definition) != _normalize_sql(EXPECTED_INDEX_DEFINITION):
         raise RuntimeError(
             "document_chunks embedding index exists with an unexpected definition; "
             "refusing to reuse or drop it automatically."
