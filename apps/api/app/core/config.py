@@ -86,6 +86,34 @@ def _non_negative_integer(
     return value
 
 
+def _discovery_limit(variable_name: str, default: str) -> int:
+    """Parse FUND_EASTMONEY_DISCOVERY_LIMIT with the explicit "full universe" sentinel.
+
+    Semantics (deliberately explicit, never implicit):
+
+    * ``0`` -- discovery disabled (the default). An empty explicit code list then
+      fails fast inside the adapter; the market is never scraped silently.
+    * ``-1`` -- full-market discovery via the D0 universe snapshot
+      (``load_or_fetch_universe``), classifier-gated; must be set explicitly.
+    * ``>0`` -- discover at most N candidate codes (legacy akshare rank path).
+
+    The previous hard ``maximum=500`` clamp is removed: positive values are now
+    unbounded, and values below ``-1`` are rejected.
+    """
+    raw_value = os.getenv(variable_name, default).strip()
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(
+            f"{variable_name} must be -1 (full universe), 0 (disabled), or a positive integer"
+        ) from exc
+    if value < -1:
+        raise ValueError(
+            f"{variable_name} must be -1 (full universe), 0 (disabled), or a positive integer"
+        )
+    return value
+
+
 def _optional_http_webhook_url(variable_name: str) -> str:
     raw_value = os.getenv(variable_name, "").strip()
     if not raw_value:
@@ -618,8 +646,9 @@ class Settings:
         # Online low-frequency pull from public Eastmoney pages. This block is only
         # consumed when FUND_DATA_SOURCE=eastmoney_direct; default sources are
         # unchanged. Codes are never discovered across the whole market unless
-        # FUND_EASTMONEY_DISCOVERY_LIMIT > 0, and an empty explicit list with
-        # discovery disabled fails fast inside the adapter.
+        # FUND_EASTMONEY_DISCOVERY_LIMIT is >0 or exactly -1 (full D0 universe),
+        # and an empty explicit list with discovery disabled fails fast inside
+        # the adapter.
         self.fund_eastmoney_fund_codes = _parse_eastmoney_fund_codes(
             os.getenv("FUND_EASTMONEY_FUND_CODES", "")
         )
@@ -637,10 +666,11 @@ class Settings:
             "FUND_EASTMONEY_ENABLE_INCREMENTAL",
             "true",
         )
-        self.fund_eastmoney_discovery_limit = _non_negative_integer(
+        # 0 disables discovery (fail-fast on empty codes); -1 selects the D0
+        # full-universe snapshot path (classifier-gated); >0 caps discovered codes.
+        self.fund_eastmoney_discovery_limit = _discovery_limit(
             "FUND_EASTMONEY_DISCOVERY_LIMIT",
             "0",
-            maximum=500,
         )
         self.fund_eastmoney_health_enabled = _strict_boolean(
             "FUND_EASTMONEY_ENABLE_HEALTH_CHECK",

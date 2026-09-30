@@ -250,6 +250,30 @@ def test_scheduler_rejects_unknown_schedule_mode(monkeypatch: pytest.MonkeyPatch
         Settings()
 
 
+def test_discovery_limit_defaults_off_and_supports_full_universe_sentinel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENVIRONMENT", "development")
+    monkeypatch.delenv("FUND_EASTMONEY_DISCOVERY_LIMIT", raising=False)
+
+    assert Settings().fund_eastmoney_discovery_limit == 0  # disabled by default
+
+    monkeypatch.setenv("FUND_EASTMONEY_DISCOVERY_LIMIT", "-1")
+    assert Settings().fund_eastmoney_discovery_limit == -1  # full D0 universe
+
+    # The old hard maximum=500 clamp is removed: large positive values pass.
+    monkeypatch.setenv("FUND_EASTMONEY_DISCOVERY_LIMIT", "5000")
+    assert Settings().fund_eastmoney_discovery_limit == 5000
+
+    monkeypatch.setenv("FUND_EASTMONEY_DISCOVERY_LIMIT", "-2")
+    with pytest.raises(ValueError, match="-1"):
+        Settings()
+
+    monkeypatch.setenv("FUND_EASTMONEY_DISCOVERY_LIMIT", "abc")
+    with pytest.raises(ValueError, match="-1"):
+        Settings()
+
+
 def test_llm_observability_defaults_and_thresholds_are_configurable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
