@@ -656,3 +656,33 @@ def test_coalesced_finalize_validation_failure_keeps_previous_active(
     assert staging_id is not None
     staging = db.get(FundDataSnapshot, staging_id)
     assert staging is not None and staging.status == "staging"
+
+
+def test_coalesced_first_run_on_empty_business_db_initializes_and_publishes(
+    tmp_path: Path,
+) -> None:
+    """A brand-new business DB (no snapshot-state row, no legacy generation) must
+    bootstrap itself and still publish exactly one coalesced generation."""
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)()
+
+    codes = _six_codes()[:2]
+    fetcher = FakeFetcher({c: _synthetic_fund(c) for c in codes})
+    with BatchState(tmp_path / "s.db") as state:
+        _plan(state, codes)
+        summary = _runner(db, state, fetcher, FakeRecon()).run(batch_size=2)
+
+    assert len(summary.generations) == 1
+    generation_id = summary.generations[0]
+    active_id, visible = _active_visible_count(db)
+    assert active_id == generation_id
+    assert visible == 2
+    # The legacy baseline was auto-created and immediately superseded.
+    legacy = db.get(FundDataSnapshot, LEGACY_SNAPSHOT_GENERATION_ID)
+    assert legacy is not None
+    assert legacy.status == "superseded"
+    published = db.get(FundDataSnapshot, generation_id)
+    assert published is not None and published.status == "active"

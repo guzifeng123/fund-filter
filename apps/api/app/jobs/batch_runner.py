@@ -53,6 +53,7 @@ from app.jobs.batch_throttle import (
     is_deterministic_message,
 )
 from app.repositories.fund_snapshots import (
+    ensure_snapshot_state,
     lock_snapshot_state,
     promote_snapshot,
     refresh_snapshot_metadata,
@@ -441,6 +442,10 @@ class BatchRunner:
         """
         if generation_id is None:
             generation_id = _new_generation_id()
+            # Empty-DB first run: ensure the singleton state row and a legacy
+            # baseline exist before opening a coalesced staging generation (the
+            # per-batch path gets this implicitly via lock_snapshot_state).
+            ensure_snapshot_state(self._db)
             stage_snapshot(
                 self._db,
                 generation_id=generation_id,
