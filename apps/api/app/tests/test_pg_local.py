@@ -18,7 +18,7 @@ SCRIPTS_DIR = REPO_ROOT / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-import pg_local  # type: ignore[import-not-found]
+import pg_local  # type: ignore[import-not-found]  # noqa: E402
 
 
 def test_resolve_config_defaults() -> None:
