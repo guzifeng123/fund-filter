@@ -715,5 +715,76 @@ class Settings:
         if self.fund_reconcile_min_nav_coverage > 1.0:
             raise ValueError("FUND_RECONCILE_MIN_NAV_COVERAGE must be between 0 and 1")
 
+        # --- D-stage: full-market sharded batch job (FUND_BATCH_*) ------------
+        # Purely additive checkpoint / throttling contract consumed by the D1-D4
+        # batch runners. The batch checkpoint lives in its *own* SQLite database
+        # (never on the Alembic-managed business DB); defaults keep local runs
+        # conservative (single worker, 0.5s per-domain interval, 3 retries).
+        default_batch_state_db = (
+            Path(__file__).resolve().parents[4] / "output" / "batch" / "state.db"
+        )
+        self.fund_batch_state_db = Path(
+            os.getenv("FUND_BATCH_STATE_DB", default_batch_state_db.as_posix())
+        )
+        self.fund_batch_size = _positive_integer(
+            "FUND_BATCH_SIZE",
+            "50",
+            maximum=10_000,
+        )
+        self.fund_batch_workers = _positive_integer(
+            "FUND_BATCH_WORKERS",
+            "1",
+            maximum=3,
+        )
+        # Per-domain minimum request interval (seconds). Independent knobs so a
+        # slow domain never starves another; defaults to a polite 0.5s.
+        self.fund_batch_min_interval_eastmoney = max(
+            0.0,
+            float(os.getenv("FUND_BATCH_MIN_INTERVAL_EASTMONEY", "0.5")),
+        )
+        self.fund_batch_min_interval_danjuan = max(
+            0.0,
+            float(os.getenv("FUND_BATCH_MIN_INTERVAL_DANJUAN", "0.5")),
+        )
+        self.fund_batch_min_interval_sina = max(
+            0.0,
+            float(os.getenv("FUND_BATCH_MIN_INTERVAL_SINA", "0.5")),
+        )
+        self.fund_batch_backoff_base_seconds = _positive_finite_float(
+            "FUND_BATCH_BACKOFF_BASE_SECONDS",
+            "2",
+        )
+        self.fund_batch_backoff_cap_seconds = _positive_finite_float(
+            "FUND_BATCH_BACKOFF_CAP_SECONDS",
+            "8",
+        )
+        self.fund_batch_max_retries = _non_negative_integer(
+            "FUND_BATCH_MAX_RETRIES",
+            "3",
+            maximum=10,
+        )
+        self.fund_batch_claim_timeout_seconds = _positive_integer(
+            "FUND_BATCH_CLAIM_TIMEOUT_SECONDS",
+            "1800",
+            maximum=86_400,
+        )
+        self.fund_batch_include_short_history = _strict_boolean(
+            "FUND_BATCH_INCLUDE_SHORT_HISTORY",
+            "false",
+        )
+        default_universe_cache_dir = (
+            Path(__file__).resolve().parents[4] / "output" / "universe"
+        )
+        self.fund_batch_universe_cache_dir = Path(
+            os.getenv(
+                "FUND_BATCH_UNIVERSE_CACHE_DIR",
+                default_universe_cache_dir.as_posix(),
+            )
+        )
+        if self.fund_batch_backoff_cap_seconds < self.fund_batch_backoff_base_seconds:
+            raise ValueError(
+                "FUND_BATCH_BACKOFF_CAP_SECONDS must be >= FUND_BATCH_BACKOFF_BASE_SECONDS"
+            )
+
 
 settings = Settings()
