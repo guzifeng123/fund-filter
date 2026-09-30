@@ -325,6 +325,73 @@ def test_rate_missing_skips_without_failure() -> None:
     assert report.critical_failures == []
 
 
+def test_primary_missing_company_custodian_is_verified_with_warning() -> None:
+    # Eastmoney FundDetail structurally lacks company/custodian; one-sided
+    # disclosure must not be treated as a contradiction.
+    primary, secondary = _consistent_pair()
+    bare = _profile(source=_PRIMARY, company=None, custodian=None)
+    primary = _snapshot(source=_PRIMARY, profile=bare, navs=primary.nav_points)
+    report = reconcile_fund(primary, secondary, ReconcileConfig())
+    assert report.status == "verified"
+    assert any(w.startswith("company:") for w in report.warnings)
+    assert any(w.startswith("custodian:") for w in report.warnings)
+    assert not any(cf.startswith("company") for cf in report.critical_failures)
+    assert not any(cf.startswith("custodian") for cf in report.critical_failures)
+
+
+def test_one_sided_missing_managers_skips_not_blocking() -> None:
+    primary, secondary = _consistent_pair()
+    bare = _profile(source=_PRIMARY, managers=[])
+    primary = _snapshot(source=_PRIMARY, profile=bare, navs=primary.nav_points)
+    report = reconcile_fund(primary, secondary, ReconcileConfig())
+    mgr = next(fc for fc in report.field_checks if fc.field == "managers")
+    assert mgr.rule == "managers_skipped"
+    assert mgr.match is False
+    assert report.status == "verified"
+
+
+def test_one_sided_or_unclassifiable_fund_type_skips() -> None:
+    primary, secondary = _consistent_pair()
+    # primary raw missing entirely
+    bare = _profile(source=_PRIMARY, fund_type_raw=None)
+    primary = _snapshot(source=_PRIMARY, profile=bare, navs=primary.nav_points)
+    report = reconcile_fund(primary, secondary, ReconcileConfig())
+    t = next(fc for fc in report.field_checks if fc.field == "fund_type")
+    assert t.rule == "fund_type_skipped"
+    assert report.status == "verified"
+
+    # primary raw present but unclassifiable (-> other) also skips
+    weird = _profile(source=_PRIMARY, fund_type_raw="另类投资")
+    primary2 = _snapshot(source=_PRIMARY, profile=weird, navs=primary.nav_points)
+    report2 = reconcile_fund(primary2, secondary, ReconcileConfig())
+    t2 = next(fc for fc in report2.field_checks if fc.field == "fund_type")
+    assert t2.rule == "fund_type_skipped"
+
+
+def test_both_sides_company_empty_is_skipped_not_fake_match() -> None:
+    primary, secondary = _consistent_pair()
+    p_prof = _profile(source=_PRIMARY, company=None)
+    s_prof = _profile(source=_SECONDARY, company="")
+    primary = _snapshot(source=_PRIMARY, profile=p_prof, navs=primary.nav_points)
+    secondary = _snapshot(source=_SECONDARY, profile=s_prof, navs=secondary.nav_points)
+    report = reconcile_fund(primary, secondary, ReconcileConfig())
+    company = next(fc for fc in report.field_checks if fc.field == "company")
+    assert company.rule == "company_skipped"
+    assert company.match is False
+    assert report.status == "verified"
+
+
+def test_company_disagreement_blocks_when_major_blocks_else_warns() -> None:
+    primary, secondary = _consistent_pair()
+    disagree = _profile(source=_SECONDARY, company="易方达基金管理有限公司")
+    secondary = _snapshot(source=_SECONDARY, profile=disagree, navs=secondary.nav_points)
+    blocked = reconcile_fund(primary, secondary, ReconcileConfig(profile_major_blocks=True))
+    assert blocked.status == "mismatch"
+    open_up = reconcile_fund(primary, secondary, ReconcileConfig(profile_major_blocks=False))
+    assert open_up.status == "verified"
+    assert any(w.startswith("company:") for w in open_up.warnings)
+
+
 def test_required_source_unreachable_is_source_unavailable() -> None:
     primary, _secondary = _consistent_pair()
     down = _snapshot(
