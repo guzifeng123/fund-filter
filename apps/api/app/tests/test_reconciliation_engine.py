@@ -738,3 +738,110 @@ def test_name_ok_but_other_major_fund_type_disagreement_still_blocks() -> None:
     ftype = next(fc for fc in report.field_checks if fc.field == "fund_type")
     assert ftype.rule == "fund_type_mismatch"
 
+
+# --- h1: fixed-term / index / QDII markers + digit share-class normalisation -
+
+
+def test_h1_synonym_pairs_match_directly() -> None:
+    # fixed-term open mode: "定期开放债券" == "定开债"
+    assert name_matches("大摩18个月定开债C", "大摩18个月定期开放债券C") is True
+    # NASDAQ index short form: "纳斯达克100" == "纳指100"
+    assert (
+        name_matches(
+            "广发纳斯达克100ETF联接美元(QDII)A", "广发纳指100ETF联接美元(QDII)A"
+        )
+        is True
+    )
+
+
+def test_h1_share_class_after_index_code_digit_is_split() -> None:
+    from app.core.reconciliation import _split_share_class, normalize_fund_name
+
+    # A trailing share letter after an ASCII index-code digit is a share class.
+    assert _split_share_class(normalize_fund_name("国联安中证医药100A")) == (
+        "国联安中证医药100",
+        "A",
+    )
+    assert _split_share_class(normalize_fund_name("嘉实沪深300C")) == (
+        "嘉实沪深300",
+        "C",
+    )
+    # English acronym tail QDII (letter preceded by a letter) is not bitten.
+    core, share = _split_share_class(normalize_fund_name("广发纳斯达克100QDII"))
+    assert share == ""
+    assert core.endswith("QDII")
+
+
+def test_h1_index_marker_omission_matches_with_same_share() -> None:
+    # "医药100A" vs "医药100指数A": digit share split + one-sided containment.
+    assert name_matches("国联安中证医药100A", "国联安中证医药100指数A") is True
+    # A vs C after the same index code must never match.
+    assert name_matches("国联安中证医药100A", "国联安中证医药100指数C") is False
+    assert name_matches("嘉实沪深300A", "嘉实沪深300C") is False
+
+
+def test_h1_fx_share_wording_stays_blocking() -> None:
+    # Different FX share wording (现汇 vs 现钞) is a distinct purchasable code and
+    # must never be collapsed by the h1 markers.
+    assert (
+        name_matches("嘉实美国成长股票美元现汇", "嘉实美国成长股票美元现钞") is False
+    )
+
+
+def test_h1_fixed_term_residual_softens_to_verified() -> None:
+    # 000005: "定期债券" vs "债券"; interleaved "信用定期债" must collapse to "信用债".
+    from app.core.reconciliation import maybe_soften_name_check
+
+    primary, secondary = _pair_with_names("嘉实增强信用定期债券", "嘉实增强信用债券")
+    raw = reconcile_fund(primary, secondary, ReconcileConfig())
+    assert _name_check(raw).rule == "name_mismatch"
+    report = maybe_soften_name_check(raw, ReconcileConfig())
+    assert _name_check(report).rule == "name_mismatch_soft"
+    assert report.status == "verified"
+    assert report.critical_failures == []
+
+
+def test_h1_qdii_marker_omission_softens_to_verified() -> None:
+    # 000044: only one side carries the "(QDII)" tag; fund_type is checked apart.
+    from app.core.reconciliation import maybe_soften_name_check
+
+    primary, secondary = _pair_with_names(
+        "嘉实美国成长股票美元现汇", "嘉实美国成长股票(QDII)美元现汇"
+    )
+    raw = reconcile_fund(primary, secondary, ReconcileConfig())
+    assert _name_check(raw).rule == "name_mismatch"
+    report = maybe_soften_name_check(raw, ReconcileConfig())
+    assert _name_check(report).rule == "name_mismatch_soft"
+    assert report.status == "verified"
+
+
+def test_h1_esg_vs_sustainability_rename_stays_blocking() -> None:
+    # 000042: even after dropping "指数", the index names differ (ESG100增强 vs
+    # 可持续发展100) and the company order is swapped -> hard mismatch.
+    from app.core.reconciliation import maybe_soften_name_check
+
+    primary, secondary = _pair_with_names(
+        "财通中证ESG100指数增强A", "中证财通可持续发展100指数"
+    )
+    raw = reconcile_fund(primary, secondary, ReconcileConfig())
+    assert _name_check(raw).rule == "name_mismatch"
+    report = maybe_soften_name_check(raw, ReconcileConfig())
+    assert _name_check(report).rule == "name_mismatch"
+    assert report.status == "mismatch"
+
+
+def test_h1_convertible_strategy_word_stays_blocking() -> None:
+    # 000067/000068: after bond words are stripped, the strategy coinage "优选"
+    # still differs from the plain convertible-bond name -> hard mismatch.
+    from app.core.reconciliation import maybe_soften_name_check
+
+    for share in ("A", "C"):
+        primary, secondary = _pair_with_names(
+            f"民生加银转债优选{share}", f"民生加银可转债{share}"
+        )
+        raw = reconcile_fund(primary, secondary, ReconcileConfig())
+        assert _name_check(raw).rule == "name_mismatch"
+        report = maybe_soften_name_check(raw, ReconcileConfig())
+        assert _name_check(report).rule == "name_mismatch", share
+        assert report.status == "mismatch", share
+
