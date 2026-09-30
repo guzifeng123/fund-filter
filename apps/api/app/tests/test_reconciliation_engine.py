@@ -4,9 +4,11 @@ All data is constructed in-memory; there is no network and no database IO.
 """
 
 from datetime import date, datetime, timezone
+from typing import cast
 
 import pytest
 
+from app.core import reconciliation as engine
 from app.core.reconciliation import (
     NavReconcileStats,
     ReconcilableNavPoint,
@@ -214,12 +216,37 @@ def test_numbers_match_abs_and_rel_paths_and_boundary() -> None:
     assert numbers_match(1.0, None, 0.0005, 0.002) is None
 
 
-def test_name_matches_ac_share_class_and_fullwidth_space() -> None:
-    assert name_matches("华夏成长混合A", "华夏成长混合C") is True
-    # fullwidth space + extra internal whitespace normalised
-    assert name_matches("华夏成长混合　A", "华夏 成长 混合 C") is True
-    assert name_matches("嘉实沪深300ETF联接A", "嘉实沪深300ETF联接C") is True
-    assert name_matches("华夏成长混合", "南方中证500") is False
+def test_name_matches_share_class_must_agree() -> None:
+    # Share class is now compared separately: same core but different share label
+    # (A vs C) must NOT match -- those are different fund codes.
+    assert name_matches("华夏成长混合A", "华夏成长混合C") is False
+    assert name_matches("嘉实沪深300ETF联接A", "嘉实沪深300ETF联接C") is False
+    # Same share label normalises across whitespace / fullwidth / punctuation.
+    assert name_matches("华夏成长混合　A", "华夏 成长 混合 A") is True
+    assert name_matches("华夏成长混合A", "南方中证500") is False
+
+
+def test_normalize_fund_name_collapses_bond_type_synonyms() -> None:
+    from app.core.reconciliation import normalize_fund_name
+
+    # The three F-phase rejected cases normalise to identical compact strings.
+    assert normalize_fund_name("中海可转债债券A") == normalize_fund_name("中海可转换债券A")
+    assert normalize_fund_name("广发景宁债券A") == normalize_fund_name("蛋卷 广发景宁纯债A")
+    # leading platform prefix stripped; punctuation / fullwidth dropped.
+    assert normalize_fund_name("蛋卷-广发景宁纯债 A") == normalize_fund_name("广发景宁纯债A")
+    # explicit traditional->simplified map (no third-party dep).
+    assert normalize_fund_name("可轉換債券") == normalize_fund_name("可转换债券")
+
+
+def test_name_matches_bond_type_synonym_pairs() -> None:
+    # Survey-backed high-confidence abbreviation variants all match.
+    assert name_matches("华商可转债债券A", "华商可转债A") is True
+    assert name_matches("国投瑞银顺达纯债债券", "国投瑞银顺达纯债") is True
+    assert name_matches("国金惠鑫短债债券C", "国金惠鑫短债C") is True
+    # Marketing coinage (an extra "收益") must NOT match.
+    assert name_matches("华润元大稳健债券C", "华润元大稳健收益债C") is False
+    # Management-company prefix drift must NOT match.
+    assert name_matches("国泰海通君得盈债券A", "国君资管君得盈债券A") is False
 
 
 def test_company_and_custodian_containment() -> None:
@@ -503,3 +530,211 @@ def test_reconcile_navs_returns_stats_shape() -> None:
     assert len(checks) == 3
     assert checks[0].unit_match is True
     assert checks[0].missing_sources == []
+
+
+# --- F-phase: name normalisation + soft-degrade gate ------------------------
+
+
+def _pair_with_names(
+    primary_name: str | None,
+    secondary_name: str | None,
+    *,
+    secondary_found: str | None = "2010-01-01",
+    primary_nav_units: list[float] | None = None,
+    secondary_nav_shift: float = 0.0,
+    secondary_fund_type_raw: str = "混合型-灵活配置",
+) -> tuple[SourceSnapshot, SourceSnapshot]:
+    """A pair with otherwise-perfect cross-check evidence, but custom names."""
+    primary_navs, secondary_navs = _aligned_navs(secondary_unit_shift=secondary_nav_shift)
+    if primary_nav_units is not None:
+        days = ["2026-01-02", "2026-01-03", "2026-01-06"]
+        primary_navs = [
+            _nav(d, u, acc=u, pct=0.0, source=_PRIMARY)
+            for d, u in zip(days, primary_nav_units)
+        ]
+        secondary_navs = [
+            _nav(d, u, acc=None, pct=None, source=_SECONDARY)
+            for d, u in zip(days, primary_nav_units)
+        ]
+    primary = _snapshot(
+        source=_PRIMARY,
+        profile=_profile(source=_PRIMARY, name=primary_name),
+        navs=primary_navs,
+    )
+    secondary = _snapshot(
+        source=_SECONDARY,
+        profile=_profile(
+            source=_SECONDARY,
+            name=secondary_name,
+            found=secondary_found,
+            fund_type_raw=secondary_fund_type_raw,
+        ),
+        navs=secondary_navs,
+    )
+    return primary, secondary
+
+
+def _name_check(report: object) -> engine.FieldCheck:
+    found = next(
+        (fc for fc in report.field_checks if fc.field == "name"),  # type: ignore[attr-defined]
+    )
+    return cast(engine.FieldCheck, found)
+
+def test_real_three_cases_normalize_to_match() -> None:
+    # 000003 / 000004 / 000037: bond-type wording synonyms collapse -> direct match.
+    for em, dj in [
+        ("中海可转债债券A", "中海可转换债券A"),
+        ("中海可转债债券C", "中海可转换债券C"),
+        ("广发景宁债券A", "蛋卷 广发景宁纯债A"),
+    ]:
+        primary, secondary = _pair_with_names(em, dj)
+        report = reconcile_fund(primary, secondary, ReconcileConfig())
+        nc = _name_check(report)
+        assert nc.rule == "name_match", f"{em} vs {dj}: {nc.rule}"
+        assert report.status == "verified"
+
+
+def test_bond_type_wording_residual_softens_to_verified() -> None:
+    # "转债" vs "可转债" does not auto-collapse (name_matches False) but the only
+    # difference is bond-type wording; with full strong evidence it softens.
+    from app.core.reconciliation import maybe_soften_name_check
+
+    primary, secondary = _pair_with_names("中海转债A", "中海可转债A")
+    raw = reconcile_fund(primary, secondary, ReconcileConfig())
+    assert _name_check(raw).rule == "name_mismatch"
+    report = maybe_soften_name_check(raw, ReconcileConfig())
+    nc = _name_check(report)
+    assert nc.rule == "name_mismatch_soft"
+    assert nc.match is False
+    # both raw names preserved for audit
+    assert nc.values.get("primary") == "中海转债A"
+    assert nc.values.get("secondary") == "中海可转债A"
+    assert report.status == "verified"
+    assert any(w.startswith("name: name_mismatch_soft:") for w in report.warnings)
+    assert report.critical_failures == []
+    assert report.nav_coverage == pytest.approx(1.0)
+    assert report.nav_mismatch == 0
+
+
+def test_share_class_drift_never_softens() -> None:
+    # Same core, A vs C share: strong evidence present, but share must agree.
+    primary, secondary = _pair_with_names("中海可转债A", "中海可转债C")
+    report = reconcile_fund(primary, secondary, ReconcileConfig())
+    nc = _name_check(report)
+    assert nc.rule == "name_mismatch"
+    assert report.status == "mismatch"
+
+
+def test_marketing_extra_word_never_softens() -> None:
+    # One side adds a marketing word ("收益"): strong evidence present, but the
+    # skeletons differ -> stays a hard blocking mismatch.
+    primary, secondary = _pair_with_names("华润元大稳健债券C", "华润元大稳健收益债C")
+    report = reconcile_fund(primary, secondary, ReconcileConfig())
+    nc = _name_check(report)
+    assert nc.rule == "name_mismatch"
+    assert report.status == "mismatch"
+
+
+def test_company_prefix_drift_never_softens() -> None:
+    primary, secondary = _pair_with_names("国泰海通君得盈债券A", "国君资管君得盈债券A")
+    report = reconcile_fund(primary, secondary, ReconcileConfig())
+    assert _name_check(report).rule == "name_mismatch"
+    assert report.status == "mismatch"
+
+
+def test_low_nav_coverage_keeps_name_blocking() -> None:
+    # coverage ~= 1/3 < 0.99 with a bond-type wording residual name diff.
+    primary_navs = [
+        _nav(f"2026-01-{day:02d}", 1.0 + day * 0.001, source=_PRIMARY)
+        for day in range(1, 11)
+    ]
+    secondary_navs = [_nav("2026-01-10", 1.009, source=_SECONDARY)]
+    primary = _snapshot(
+        source=_PRIMARY, profile=_profile(source=_PRIMARY, name="中海转债A"), navs=primary_navs
+    )
+    secondary = _snapshot(
+        source=_SECONDARY,
+        profile=_profile(source=_SECONDARY, name="中海可转债A"),
+        navs=secondary_navs,
+    )
+    report = reconcile_fund(primary, secondary, ReconcileConfig())
+    assert report.nav_coverage < 0.99
+    assert _name_check(report).rule == "name_mismatch"
+    assert report.status == "mismatch"
+
+
+def test_nav_mismatch_point_keeps_name_blocking() -> None:
+    primary, secondary = _pair_with_names("中海转债A", "中海可转债A", secondary_nav_shift=0.05)
+    report = reconcile_fund(primary, secondary, ReconcileConfig())
+    assert report.nav_mismatch == 3
+    assert _name_check(report).rule == "name_mismatch"
+    assert report.status == "mismatch"
+
+
+def test_found_date_mismatch_keeps_name_blocking() -> None:
+    primary, secondary = _pair_with_names(
+        "中海转债A", "中海可转债A", secondary_found="2011-02-03"
+    )
+    report = reconcile_fund(primary, secondary, ReconcileConfig())
+    assert any(cf.startswith("found_date:") for cf in report.critical_failures)
+    assert _name_check(report).rule == "name_mismatch"
+    assert report.status == "mismatch"
+
+
+def test_found_date_skipped_never_softens_to_verified() -> None:
+    from app.core.reconciliation import maybe_soften_name_check
+
+    primary, secondary = _pair_with_names("中海转债A", "中海可转债A", secondary_found=None)
+    raw = reconcile_fund(primary, secondary, ReconcileConfig())
+    assert _name_check(raw).rule == "name_mismatch"
+    # found_date skipped -> softening gate refuses (found_date must be exact),
+    # so the fund must NOT become "verified" via the name softening.
+    report = maybe_soften_name_check(raw, ReconcileConfig())
+    assert _name_check(report).rule == "name_mismatch"
+    assert report.status != "verified"
+
+
+def test_critical_failure_present_keeps_name_blocking() -> None:
+    # Simulate the sina accumulated-NAV critical the orchestrator adds: even with
+    # perfect NAV history, a critical present forbids name softening.
+    from dataclasses import replace as _replace
+
+    from app.core.reconciliation import maybe_soften_name_check
+
+    primary, secondary = _pair_with_names("中海转债A", "中海可转债A")
+    raw = reconcile_fund(primary, secondary, ReconcileConfig())
+    # C1 leaves the literal name mismatch blocking; the C3 softening step proves it.
+    assert _name_check(raw).rule == "name_mismatch"
+    assert raw.status == "mismatch"
+    softened = maybe_soften_name_check(raw, ReconcileConfig())
+    assert _name_check(softened).rule == "name_mismatch_soft"
+    assert softened.status == "verified"
+    # Now poison a critical (e.g. accumulated-NAV disagreement) BEFORE softening.
+    poisoned = _replace(
+        raw,
+        critical_failures=[*raw.critical_failures, "accumulated_nav: latest 1.0 vs sina 9.9"],
+    )
+    again = maybe_soften_name_check(poisoned, ReconcileConfig())
+    assert _name_check(again).rule == "name_mismatch"
+    assert again.status == "mismatch"
+
+
+def test_one_sided_name_still_skip_not_match() -> None:
+    primary, secondary = _pair_with_names("中海可转债债券A", None)
+    report = reconcile_fund(primary, secondary, ReconcileConfig())
+    nc = _name_check(report)
+    assert nc.rule == "name_skipped"
+    assert any(w.startswith("name:") for w in report.warnings)
+
+
+def test_name_ok_but_other_major_fund_type_disagreement_still_blocks() -> None:
+    # Name agrees (identical) but fund_type major mismatch -> still blocked.
+    primary, secondary = _pair_with_names(
+        "中海可转债债券A", "中海可转换债券A", secondary_fund_type_raw="股票型"
+    )
+    report = reconcile_fund(primary, secondary, ReconcileConfig())
+    assert _name_check(report).rule == "name_match"
+    assert report.status == "mismatch"
+    ftype = next(fc for fc in report.field_checks if fc.field == "fund_type")
+    assert ftype.rule == "fund_type_mismatch"
+
