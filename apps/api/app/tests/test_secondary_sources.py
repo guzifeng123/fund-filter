@@ -293,10 +293,16 @@ def test_danjuan_health_ok_on_success() -> None:
 # sina: batch GBK quotes
 # --------------------------------------------------------------------------- #
 class FakeSina(SinaSource):
-    def __init__(self, body: str) -> None:
+    def __init__(self, body: str, *, batch: bool = True, batch_size: int = 40) -> None:
         self._body = body
         self.requested_urls: list[str] = []
-        super().__init__(timeout_seconds=1, min_interval_seconds=0.0, sleep=lambda s: None)
+        super().__init__(
+            timeout_seconds=1,
+            min_interval_seconds=0.0,
+            batch=batch,
+            batch_size=batch_size,
+            sleep=lambda s: None,
+        )
 
     def _raw_get_text(self, url: str) -> str:
         self.requested_urls.append(url)
@@ -327,6 +333,28 @@ def test_sina_batch_parses_both_funds_with_accumulated_nav() -> None:
     assert two.unit_nav == pytest.approx(7.8755)
     # 002910 accumulated NAV == unit NAV (no dividend history).
     assert two.accumulated_nav == pytest.approx(7.8755)
+
+
+def test_sina_batch_groups_codes_into_one_request() -> None:
+    source = _sina_source()
+
+    source.fetch_quotes(["000001", "002910"])
+
+    # Both codes share a single list= request when batching is on.
+    assert len(source.requested_urls) == 1
+    assert "of000001,of002910" in source.requested_urls[0]
+
+
+def test_sina_batch_off_sends_one_request_per_code() -> None:
+    body = (FIXTURE_DIR / "sina_quotes_of000001_of002910.txt").read_text(encoding="utf-8")
+    source = FakeSina(body, batch=False)
+
+    quotes = source.fetch_quotes(["000001", "002910"])
+
+    # batch=False: N codes -> N separate requests (chunk size 1).
+    assert len(quotes) == 2
+    assert len(source.requested_urls) == 2
+    assert all(url.count("of") == 1 for url in source.requested_urls)
 
 
 def test_sina_fetch_navs_returns_single_point_with_accumulated_nav() -> None:

@@ -78,6 +78,7 @@ class SinaSource:
         timeout_seconds: int | None = None,
         min_interval_seconds: float | None = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
+        batch: bool = True,
         probe_code: str = PROBE_CODE,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
@@ -92,6 +93,10 @@ class SinaSource:
             else settings.fund_reconcile_secondary_min_interval_seconds
         )
         self.batch_size = max(1, batch_size)
+        # FUND_RECONCILE_SINA_BATCH: batch=True groups codes into one list= request
+        # of up to batch_size; batch=False sends one request per code (chunk size 1).
+        self.batch = batch
+        self._chunk_size = self.batch_size if batch else 1
         self.probe_code = probe_code
         self._sleep = sleep
         self._last_request_at = 0.0
@@ -143,7 +148,7 @@ class SinaSource:
         """
         normalized = [_normalize_code(code) for code in codes]
         result: dict[str, SinaQuote] = {}
-        for chunk in _chunks(normalized, self.batch_size):
+        for chunk in _chunks(normalized, self._chunk_size):
             symbols = ",".join(f"of{code}" for code in chunk)
             url = QUOTE_URL.format(symbols=symbols)
             text = self._get_text(url)
