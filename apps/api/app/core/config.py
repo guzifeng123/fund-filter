@@ -382,6 +382,34 @@ class Settings:
             1,
             int(os.getenv("DATABASE_CONNECT_TIMEOUT_SECONDS", "2")),
         )
+        # --- D3: PostgreSQL connection pool / statement budget (FUND_PG_*) ---
+        # These only take effect when DATABASE_URL targets a PostgreSQL backend;
+        # the SQLite zero-config path is untouched. Defaults are conservative and
+        # sized for a single-node development / staging instance.
+        self.fund_pg_pool_size = _positive_integer(
+            "FUND_PG_POOL_SIZE",
+            "5",
+            maximum=50,
+        )
+        self.fund_pg_max_overflow = _non_negative_integer(
+            "FUND_PG_MAX_OVERFLOW",
+            "10",
+            maximum=50,
+        )
+        self.fund_pg_pool_pre_ping = _strict_boolean(
+            "FUND_PG_POOL_PRE_PING",
+            "true",
+        )
+        self.fund_pg_connect_timeout_seconds = _positive_integer(
+            "FUND_PG_CONNECT_TIMEOUT_SECONDS",
+            "5",
+            maximum=60,
+        )
+        self.fund_pg_statement_timeout_seconds = _positive_integer(
+            "FUND_PG_STATEMENT_TIMEOUT_SECONDS",
+            "30",
+            maximum=3600,
+        )
         self.data_status_timeout_seconds = max(
             0.1,
             float(os.getenv("DATA_STATUS_TIMEOUT_SECONDS", "2.5")),
