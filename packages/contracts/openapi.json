@@ -204,6 +204,27 @@
         }
       }
     },
+    "/api/data/reconciliation": {
+      "get": {
+        "tags": [
+          "data-reconciliation"
+        ],
+        "summary": "Data Reconciliation",
+        "operationId": "data_reconciliation_api_data_reconciliation_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_DataReconciliationReport_"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/data/sources/health": {
       "get": {
         "tags": [
@@ -1782,6 +1803,22 @@
         ],
         "title": "ApiResponse[DataQualityReport]"
       },
+      "ApiResponse_DataReconciliationReport_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DataReconciliationReport"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ApiResponse[DataReconciliationReport]"
+      },
       "ApiResponse_DataSourceHealthReport_": {
         "properties": {
           "data": {
@@ -2697,6 +2734,165 @@
         ],
         "title": "DataQualityReport"
       },
+      "DataReconciliationReport": {
+        "properties": {
+          "threshold_version": {
+            "type": "string",
+            "title": "Threshold Version"
+          },
+          "overall_status": {
+            "type": "string",
+            "enum": [
+              "never_run",
+              "verified",
+              "unverified",
+              "rejected"
+            ],
+            "title": "Overall Status"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sources",
+            "default": []
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "snapshot_generation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Generation Id"
+          },
+          "job_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Name"
+          },
+          "job_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Status"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "fund_count": {
+            "type": "integer",
+            "title": "Fund Count",
+            "default": 0
+          },
+          "critical_failure_count": {
+            "type": "integer",
+            "title": "Critical Failure Count",
+            "default": 0
+          },
+          "warning_count": {
+            "type": "integer",
+            "title": "Warning Count",
+            "default": 0
+          },
+          "funds": {
+            "items": {
+              "$ref": "#/components/schemas/FundReconciliationView"
+            },
+            "type": "array",
+            "title": "Funds",
+            "default": []
+          },
+          "funds_truncated": {
+            "type": "boolean",
+            "title": "Funds Truncated",
+            "default": false
+          },
+          "report_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Path"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "threshold_version",
+          "overall_status"
+        ],
+        "title": "DataReconciliationReport"
+      },
       "DataSourceHealthReport": {
         "properties": {
           "source": {
@@ -3398,6 +3594,82 @@
           "fee_lte"
         ],
         "title": "FundFilterRequest"
+      },
+      "FundReconciliationView": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "unverified",
+              "mismatch",
+              "source_unavailable"
+            ],
+            "title": "Status"
+          },
+          "critical": {
+            "type": "boolean",
+            "title": "Critical",
+            "default": false
+          },
+          "nav_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nav Coverage"
+          },
+          "nav_agreement": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nav Agreement"
+          },
+          "critical_failures": {
+            "type": "integer",
+            "title": "Critical Failures",
+            "default": 0
+          },
+          "warnings": {
+            "type": "integer",
+            "title": "Warnings",
+            "default": 0
+          },
+          "field_diffs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Field Diffs",
+            "default": []
+          },
+          "source_values": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Source Values",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "status"
+        ],
+        "title": "FundReconciliationView"
       },
       "HTTPValidationError": {
         "properties": {

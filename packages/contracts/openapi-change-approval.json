@@ -2,26 +2,25 @@
   "schema_version": 1,
   "contract_path": "packages/contracts/openapi.json",
   "baseline": {
-    "git_ref": "HEAD",
-    "contract_blob": "e8ebbd8074c36186607d35b74a82dc62ab2931e3"
+    "git_ref": "582feb8",
+    "contract_blob": "0ac67b97fcf860ec586a3d0ca887f9b1ad12f336"
   },
-  "approved_export_sha256": "96118579879680540b3cabcb123d2cac3592a39aad7ffa7075f44816dd348559",
-  "approved_diff_sha256": "ecf5260d0ad25cf91f19dbe23fcc394cb82d93d61f97a3d7276060e6566763e7",
-  "approved_summary_sha256": "c56bb99f4a9f22be84d01c480cf9a1055bb6b0e5c8d41dec4cf47dbcf02af7e8",
+  "approved_export_sha256": "5daaa88a3e985e7eb3c1c70562736031e5c64aea09b0e7968ac2a7e575728ed5",
+  "approved_diff_sha256": "0e3d4ca6bb0a1f6345e4a64cfc99a3dc4420947785d9281fa98b90505c8bc003",
+  "approved_summary_sha256": "04b1eb689487181b9f4251dad4ee33cf9f7f0d55e1e0199118d2d2d6a495b1bb62",
   "breaking_hints_reviewed": true,
   "review": {
-    "reviewed_on": "2026-09-29",
-    "reviewer": "organizer-integration",
-    "reason": "Integrated B2+B4 additive, read-only endpoints: GET /api/data/quality (NAV-series/profile quality summary; DataQualityReport/DataQualityIssue) and GET /api/data/sources/health (upstream reachability/latency probe; DataSourceHealthReport/EndpointHealth). Diff vs pre-feature baseline 7d34065 adds exactly 2 operations and 6 schemas with zero breaking hints; no existing operation, field, constraint, response code, or required parameter changed."
+    "reviewed_on": "2026-09-30",
+    "reviewer": "main-agent-integration",
+    "reason": "Integrated C1+C2+C3 cross-source reconciliation feature, adding one additive read-only endpoint: GET /api/data/reconciliation (latest multi-source cross-check summary: per-fund verified/mismatch/unverified/source_unavailable status, NAV point coverage/agreement, critical failures, warnings, and per-field source values). Diff vs pre-feature baseline 582feb8 adds exactly 1 operation and 3 schemas (DataReconciliationReport, FundReconciliationView, ApiResponse_DataReconciliationReport_) with zero breaking hints; no existing operation, field, constraint, response code, or required parameter changed. The write gate itself adds no endpoint and only enforces reconciliation before staging for online sources."
   },
   "change_list": {
     "operations_added": [
-      "GET /api/data/quality",
-      "GET /api/data/sources/health"
+      "GET /api/data/reconciliation"
     ],
     "schema_fields_added": [],
     "constraints_tightened": [],
     "response_codes_added": 0,
-    "schemas_added": 6
+    "schemas_added": 3
   }
 }
