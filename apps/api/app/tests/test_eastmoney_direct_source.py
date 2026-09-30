@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, cast
 from unittest.mock import patch
 
+import pandas as pd  # type: ignore[import-untyped]
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -207,6 +208,102 @@ def test_explicit_fund_failure_propagates(tmp_path: Path) -> None:
     builder.fail_codes = {"000001"}
     with pytest.raises(RuntimeError, match="upstream unavailable"):
         source.fetch_snapshot()
+
+
+# --------------------------------------------------- full-universe discovery (-1)
+
+
+_UNIVERSE_EPOCH = 1_790_640_000_000
+
+
+def _universe_fetcher() -> tuple[pd.DataFrame, pd.DataFrame]:
+    rank = pd.DataFrame(
+        [
+            {"基金代码": "000001", "基金简称": "华夏成长混合", "单位净值": 1.1, "累计净值": 3.0, "日期": _UNIVERSE_EPOCH, "近3年": 30.0},
+            {"基金代码": "000198", "基金简称": "现金增利货币A", "单位净值": 1.0, "累计净值": 1.0, "日期": _UNIVERSE_EPOCH, "近3年": None},
+            {"基金代码": "000003", "基金简称": "新成立短历史混合", "单位净值": 1.0, "累计净值": 1.0, "日期": _UNIVERSE_EPOCH, "近3年": None},
+            {"基金代码": "110007", "基金简称": "易方达稳健收益债券", "单位净值": 1.8, "累计净值": 2.0, "日期": _UNIVERSE_EPOCH, "近3年": 20.0},
+            {"基金代码": "999999", "基金简称": "某券商资管集合计划", "单位净值": 1.0, "累计净值": 1.0, "日期": _UNIVERSE_EPOCH, "近3年": 1.0},
+        ]
+    )
+    name = pd.DataFrame(
+        [
+            {"基金代码": "000001", "基金类型": "混合型-灵活"},
+            {"基金代码": "000198", "基金类型": "货币型-普通"},
+            {"基金代码": "000003", "基金类型": "混合型-灵活"},
+            {"基金代码": "110007", "基金类型": "债券型-长债"},
+            {"基金代码": "999999", "基金类型": "混合型-灵活"},
+        ]
+    )
+    return rank, name
+
+
+class _PerCodeBuilder(FakeBuilder):
+    """FakeBuilder that tags each built snapshot with its requested code."""
+
+    def fetch_raw(
+        self,
+        code: str,
+        as_of: date,
+        *,
+        start_date: date | None = None,
+    ) -> EastmoneyRawSnapshot:
+        raw = super().fetch_raw(code, as_of, start_date=start_date)
+        raw.base_info["FCODE"] = code
+        return raw
+
+
+def _make_full_universe_source(tmp_path: Path, **overrides: Any) -> tuple[EastmoneyDirectFundDataSource, _PerCodeBuilder]:
+    kwargs: dict[str, Any] = {
+        "fund_codes": (),
+        "discovery_limit": -1,
+        "enable_incremental": False,
+        "cache_dir": str(tmp_path / "navcache"),
+        "universe_cache_dir": str(tmp_path / "universe"),
+        "universe_fetcher": _universe_fetcher,
+        "timeout_seconds": 5,
+        "min_interval_seconds": 0.0,
+    }
+    kwargs.update(overrides)
+    source = EastmoneyDirectFundDataSource(**kwargs)
+    builder = _PerCodeBuilder()
+    source._builder = builder  # type: ignore[assignment]
+    return source, builder
+
+
+def test_full_universe_discovery_includes_only_supported(tmp_path: Path) -> None:
+    source, _ = _make_full_universe_source(tmp_path)
+    funds = source.fetch_snapshot()
+    # 货币(000198) pre-filtered (no 3y); short-history(000003) excluded;
+    # 资管(999999) dropped by classifier.
+    assert sorted(fund.code for fund in funds) == ["000001", "110007"]
+
+
+def test_full_universe_discovery_short_history_switch(tmp_path: Path) -> None:
+    off, _ = _make_full_universe_source(tmp_path / "off", include_short_history=False)
+    on, _ = _make_full_universe_source(tmp_path / "on", include_short_history=True)
+    assert sorted(f.code for f in off.fetch_snapshot()) == ["000001", "110007"]
+    assert sorted(f.code for f in on.fetch_snapshot()) == ["000001", "000003", "110007"]
+
+
+def test_full_universe_explicit_codes_take_precedence(tmp_path: Path) -> None:
+    source, _ = _make_full_universe_source(tmp_path, fund_codes=("555555",))
+    funds = source.fetch_snapshot()
+    assert sorted(fund.code for fund in funds) == ["000001", "110007", "555555"]
+
+
+def test_full_universe_discovery_failure_is_recorded_not_fatal(tmp_path: Path) -> None:
+    def boom() -> tuple[pd.DataFrame, pd.DataFrame]:
+        raise RuntimeError("akshare down")
+
+    source, _ = _make_full_universe_source(
+        tmp_path, fund_codes=("555555",), universe_fetcher=boom
+    )
+    funds = source.fetch_snapshot()
+    assert [fund.code for fund in funds] == ["555555"]
+    skipped = source.last_run_report["skipped"]
+    assert skipped and skipped[0]["stage"] == "discovery"
+    assert "akshare down" in skipped[0]["reason"]
 
 
 # ------------------------------------------------------------------- health

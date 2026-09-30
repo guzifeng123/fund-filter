@@ -34,6 +34,12 @@ from app.data_sources.profiles.eastmoney_snapshot import (
     EastmoneySnapshotBuilder,
     build_fund_snapshot,
 )
+from app.data_sources.universe import (
+    UniverseFilters,
+    UniverseFetcher,
+    default_fetcher,
+    load_or_fetch_universe,
+)
 from app.schemas.data_source_health import DataSourceHealthReport, EndpointHealth
 from app.schemas.funds import FundDetail
 
@@ -59,6 +65,9 @@ class EastmoneyDirectFundDataSource:
         min_interval_seconds: float | None = None,
         health_enabled: bool | None = None,
         discover_codes: Callable[[int], list[str]] | None = None,
+        universe_fetcher: UniverseFetcher | None = None,
+        universe_cache_dir: str | None = None,
+        include_short_history: bool | None = None,
     ) -> None:
         self._configured_codes = list(
             fund_codes if fund_codes is not None else settings.fund_eastmoney_fund_codes
@@ -93,6 +102,21 @@ class EastmoneyDirectFundDataSource:
             else settings.fund_eastmoney_health_enabled
         )
         self._discover_codes = discover_codes
+        # Full-universe discovery (discovery_limit == -1) runs through the D0
+        # snapshot pipeline. The fetcher/cache are injectable so tests never touch
+        # akshare/network; include_short_history gates <3y history funds.
+        self._universe_fetcher = universe_fetcher
+        raw_universe_cache = (
+            universe_cache_dir
+            if universe_cache_dir is not None
+            else settings.fund_batch_universe_cache_dir.as_posix()
+        )
+        self._universe_cache_dir = Path(raw_universe_cache) if raw_universe_cache else None
+        self._include_short_history = (
+            include_short_history
+            if include_short_history is not None
+            else settings.fund_batch_include_short_history
+        )
         self._builder = EastmoneySnapshotBuilder(
             self._timeout_seconds,
             self._min_interval_seconds,
@@ -110,12 +134,14 @@ class EastmoneyDirectFundDataSource:
                 + ", ".join(invalid)
             )
         self._codes: list[str] = list(dict.fromkeys(self._configured_codes))
-        self._discovery_enabled = self._discovery_limit > 0
+        # 0 = discovery disabled (fail-fast on empty codes); -1 = full D0
+        # universe; >0 = limited akshare rank discovery.
+        self._discovery_enabled = self._discovery_limit != 0
         if not self._codes and not self._discovery_enabled:
             raise ValueError(
                 "eastmoney_direct requires FUND_EASTMONEY_FUND_CODES (explicit six-digit "
-                "codes) or FUND_EASTMONEY_DISCOVERY_LIMIT > 0; it never silently scrapes "
-                "the whole market"
+                "codes) or FUND_EASTMONEY_DISCOVERY_LIMIT != 0 (>0 or -1); it never "
+                "silently scrapes the whole market"
             )
 
     # ------------------------------------------------------------- fund codes
@@ -124,9 +150,8 @@ class EastmoneyDirectFundDataSource:
         codes: list[str] = list(self._codes)
         skipped: list[dict[str, Any]] = []
         if self._discovery_enabled:
-            discovery_fn = self._discover_codes or self._default_discover_codes
             try:
-                discovered = discovery_fn(self._discovery_limit)
+                discovered = self._discover_codes_for_limit()
             except Exception as exc:  # discovery is best-effort, never fatal
                 skipped.append(
                     {
@@ -142,6 +167,42 @@ class EastmoneyDirectFundDataSource:
         if not codes:
             raise ValueError("eastmoney_direct resolved to an empty fund set; refusing sync")
         return codes, skipped
+
+    def _discover_codes_for_limit(self) -> list[str]:
+        """Return the candidate codes depending on the configured discovery limit."""
+        if self._discovery_limit == -1:
+            return self._default_discover_universe_codes()
+        if self._discover_codes is not None:
+            return self._discover_codes(self._discovery_limit)
+        return self._default_discover_codes(self._discovery_limit)
+
+    def _default_discover_universe_codes(self) -> list[str]:
+        """Full-market discovery through the D0 universe snapshot + classifier.
+
+        Only funds the classifier routes to ``supported`` are returned. When
+        ``include_short_history`` is False the universe pre-filter requires a
+        近3年 metric; when True, short-history eligible classes are promoted to
+        supported by the classifier instead. Special caliber (money-market,
+        on-exchange ETF, REITs, commodity) and secondary/unknown shares are dropped.
+        """
+        # Imported lazily: fund_classifier pulls in this package's universe
+        # submodule, and importing it at module load would cycle back through
+        # app.data_sources.__init__ while eastmoney_direct is still loading.
+        from app.core.fund_classifier import classify
+
+        filters = UniverseFilters(require_has_3y=not self._include_short_history)
+        cache_dir = self._universe_cache_dir or settings.fund_batch_universe_cache_dir
+        funds = load_or_fetch_universe(
+            cache_dir=cache_dir,
+            filters=filters,
+            fetcher=self._universe_fetcher or default_fetcher,
+        )
+        codes: list[str] = []
+        for fund in funds:
+            decision = classify(fund, include_short_history=self._include_short_history)
+            if decision.route == "supported" and _SIX_DIGIT.fullmatch(fund.code):
+                codes.append(fund.code)
+        return codes
 
     def _default_discover_codes(self, limit: int) -> list[str]:
         if self._discover_codes is not None:
