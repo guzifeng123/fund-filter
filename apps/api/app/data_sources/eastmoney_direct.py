@@ -317,6 +317,7 @@ class EastmoneyDirectFundDataSource:
             "cached_nav_rows": len(cached_rows),
             "fetched_nav_rows": len(raw.nav_rows),
             "merged_nav_rows": len(merged_rows),
+            "nav_trace": raw.nav_trace,
         }
         if reason:
             report["fallback_reason"] = reason

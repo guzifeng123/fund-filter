@@ -167,7 +167,12 @@ def _consistent_pair() -> tuple[SourceSnapshot, SourceSnapshot]:
         ("交易型开放式", "etf"),
         ("LOF", "lof"),
         ("QDII股票", "qdii"),
+        ("QDII-股票", "qdii"),
+        ("指数型-海外股票", "qdii"),  # eastmoney overseas suffix == danjuan QDII bucket
         ("FOF", "fof"),
+        ("FOF-稳健型", "fof"),
+        ("FOF-偏债混合", "fof"),
+        ("指数型-沪深300", "index"),  # onshore index stays index, not qdii
         ("另类投资", "other"),
         ("", "other"),
         (None, "other"),
