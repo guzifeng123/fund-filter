@@ -274,7 +274,15 @@ def test_health_router_returns_envelope() -> None:
 def test_sync_all_atomic_promotion_with_direct_source(
     db_session: Session,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Isolate the C3 reconciliation gate: this offline direct-source test must not
+    # construct network secondary clients. Gate behaviour is covered in
+    # test_reconciliation_gate.py.
+    monkeypatch.setattr(
+        "app.jobs.sync_fund_data._build_reconciliation_service",
+        lambda source: None,
+    )
     source, _ = _make_source(tmp_path)
     result = sync_all(db_session, source_override=source)
     assert result["source"] == "eastmoney_direct"

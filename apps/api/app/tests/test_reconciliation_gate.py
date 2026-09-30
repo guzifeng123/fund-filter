@@ -8,6 +8,8 @@ visible, and records the divergence in ``job_runs.details``.
 
 from datetime import date
 from pathlib import Path
+import sys
+from types import ModuleType
 from typing import Any, cast
 
 import pytest
@@ -68,7 +70,7 @@ class StubSource:
 
 
 class FakeDanjuan:
-    name = "danjuan"
+    source_name = "danjuan"
 
     def __init__(
         self,
@@ -98,7 +100,7 @@ class FakeDanjuan:
 
 
 class FakeSina:
-    name = "sina"
+    source_name = "sina"
 
     def __init__(self, *, acc: float | None = 1.02, raise_quotes: bool = False) -> None:
         self._acc = acc
@@ -126,8 +128,8 @@ def _consistent_danjuan_profile(code: str = "000001") -> engine.ReconcilableProf
         name="稳健成长混合A",
         full_name=None,
         found_date=date(2018, 3, 15),
-        company="eastmoney",
-        custodian="eastmoney_snapshot_v1",
+        company="华夏基金管理有限公司",
+        custodian="中国建设银行股份有限公司",
         managers=["陈安"],
         fund_type_raw="混合型-灵活配置",
         benchmark=None,
@@ -333,8 +335,8 @@ def test_minor_scale_drift_is_warning_only(
         name="稳健成长混合A",
         full_name=None,
         found_date=date(2018, 3, 15),
-        company="eastmoney",
-        custodian="eastmoney_snapshot_v1",
+        company="华夏基金管理有限公司",
+        custodian="中国建设银行股份有限公司",
         managers=["陈安"],
         fund_type_raw="混合型-灵活配置",
         benchmark=None,
@@ -407,3 +409,63 @@ def test_source_outside_apply_list_skips_gate(
     monkeypatch.setattr(settings, "fund_reconcile_enabled", True)
     details = sync_fund_data.sync_all(db_session, "sample_local")
     assert "reconciliation" not in details
+
+
+def test_assembly_missing_c2_module_skips_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Simulate C2 not deployed: poisoning sys.modules with None makes
+    # importlib.import_module raise ImportError -> the builder must log + return
+    # None rather than fail the run.
+    monkeypatch.setattr(settings, "fund_reconcile_enabled", True)
+    monkeypatch.setattr(settings, "fund_reconcile_apply_to_sources", [RECONCILED_SOURCE])
+    monkeypatch.setitem(sys.modules, "app.data_sources.secondary.danjuan", None)
+    monkeypatch.setitem(sys.modules, "app.data_sources.secondary.sina", None)
+
+    result = sync_fund_data._build_reconciliation_service(cast(Any, StubSource([])))
+    assert result is None
+
+
+def test_assembly_constructor_error_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
+    # C2 present but mis-wired (constructor TypeError) must NOT be swallowed: the
+    # gate may not silently close. Inject fake modules whose clients raise on init.
+    monkeypatch.setattr(settings, "fund_reconcile_enabled", True)
+    monkeypatch.setattr(settings, "fund_reconcile_apply_to_sources", [RECONCILED_SOURCE])
+
+    def _boom(self: object, **_: object) -> None:
+        raise TypeError("bad config wiring")
+
+    danjuan_mod = ModuleType("app.data_sources.secondary.danjuan")
+    sina_mod = ModuleType("app.data_sources.secondary.sina")
+    setattr(danjuan_mod, "DanjuanSource", type("DanjuanSource", (), {"__init__": _boom}))
+    setattr(sina_mod, "SinaSource", type("SinaSource", (), {"__init__": _boom}))
+    monkeypatch.setitem(sys.modules, "app.data_sources.secondary.danjuan", danjuan_mod)
+    monkeypatch.setitem(sys.modules, "app.data_sources.secondary.sina", sina_mod)
+
+    with pytest.raises(TypeError, match="bad config wiring"):
+        sync_fund_data._build_reconciliation_service(cast(Any, StubSource([])))
+
+
+def test_primary_missing_company_custodian_is_skip_not_block(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    # Real recording scenario: eastmoney primary discloses neither the management
+    # company nor the custodian; danjuan does. C1 must treat the one-sided major
+    # field as a skip (warning), so the fund still verifies.
+    sync_fund_data.sync_all(db_session, "sample_local")
+    _report_dir(tmp_path, monkeypatch)
+    source = StubSource([_fund()])
+    install_gate(
+        monkeypatch,
+        source,
+        danjuan=FakeDanjuan(navs=_consistent_danjuan_navs(), profile=_consistent_danjuan_profile()),
+        sina=FakeSina(acc=1.02),
+    )
+    details = sync_fund_data.sync_all(db_session, RECONCILED_SOURCE)
+    rec = cast(dict[str, Any], details["reconciliation"])
+    assert rec["overall_status"] == "verified"
+    fund_row = rec["funds"][0]
+    assert fund_row["status"] == "verified"
+    # company / custodian one-sided disclosure surfaces as a warning, not a critical.
+    assert fund_row["critical"] is False
+    assert fund_row["warnings"] >= 1

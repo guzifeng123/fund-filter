@@ -122,10 +122,11 @@ def _build_reconciliation_service(source: FundDataSource) -> ReconciliationServi
             min_interval_seconds=settings.fund_reconcile_secondary_min_interval_seconds,
             batch=settings.fund_reconcile_sina_batch,
         )
-    except Exception as exc:  # C2 not vendored in this branch / assembly error
-        # Without secondary clients the gate cannot cross-check; degrade to a
-        # skip rather than fail an offline source run. Per-fund network outages
-        # are still handled fail-closed inside ReconciliationService.
+    except ImportError as exc:
+        # C2 not deployed in this runtime (module absent): the gate cannot run, so
+        # degrade to a logged skip. Any *other* assembly failure (TypeError / bad
+        # config / missing attribute) is a wiring bug and MUST propagate so the gate
+        # is never silently disabled.
         logger.warning("reconciliation secondary clients unavailable; gate skipped: %s", exc)
         return None
     return ReconciliationService(source, danjuan, sina, settings)

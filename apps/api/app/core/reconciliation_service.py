@@ -84,7 +84,7 @@ class ReconciliationSourceLike(Protocol):
     rather than crashing the whole gate.
     """
 
-    name: str
+    source_name: str
 
     def fetch_profile(self, code: str) -> Any:
         """Return this source's view of one fund's profile, or raise on failure."""
@@ -123,9 +123,15 @@ def _parse_iso_date(raw: str) -> date | None:
         return None
 
 
-def _earliest_iso_nav_date(fund: FundDetail) -> str | None:
-    dates = [p.trade_date for p in fund.navs if len(p.trade_date) == 10]
-    return min(dates) if dates else None
+def _earliest_nav_date(fund: FundDetail) -> date | None:
+    earliest: date | None = None
+    for point in fund.navs:
+        if len(point.trade_date) != 10:
+            continue
+        parsed = _parse_iso_date(point.trade_date)
+        if parsed is not None and (earliest is None or parsed < earliest):
+            earliest = parsed
+    return earliest
 
 
 def _latest_iso_nav(fund: FundDetail) -> NavPoint | None:
@@ -187,12 +193,15 @@ class ReconciliationService:
             name=fund.name,
             full_name=None,
             found_date=_parse_iso_date(fund.inception_date),
-            # FundDetail does not carry a raw fund-company / custodian name; reuse
-            # the non-empty provider provenance strings as the cross-check anchor so
-            # an absent secondary disclosure degrades to a warning rather than a
-            # spurious major mismatch.
-            company=fund.upstream_provider,
-            custodian=fund.provider_profile,
+            # The eastmoney primary adapter does NOT disclose the fund-management
+            # company or the custodian bank: upstream_provider/provider_profile are
+            # source labels ("eastmoney" / "eastmoney_snapshot_v1"), not company
+            # names. Report them honestly as absent. C1's engine treats a major
+            # field present on only one side as a skip (warning) rather than a
+            # blocking mismatch, so danjuan's real keeper_name/trup_name are
+            # recorded without forcing a false contradiction.
+            company=None,
+            custodian=None,
             managers=[fund.manager_name] if fund.manager_name else [],
             fund_type_raw=_PRIMARY_TYPE_HINT.get(fund.fund_type, fund.fund_type),
             benchmark=None,
@@ -210,7 +219,7 @@ class ReconciliationService:
         danjuan_available = True
         danjuan_error: str | None = None
 
-        since = _earliest_iso_nav_date(fund)
+        since = _earliest_nav_date(fund)
         try:
             raw_navs = self._danjuan.fetch_navs(fund.code, since=since) or []
             nav_points = [
@@ -219,7 +228,7 @@ class ReconciliationService:
                     unit_nav=getattr(p, "unit_nav", None),
                     accumulated_nav=getattr(p, "accumulated_nav", None),
                     daily_change_pct=getattr(p, "daily_change_pct", None),
-                    source=self._danjuan.name,
+                    source=self._danjuan.source_name,
                 )
                 for p in raw_navs
             ]
@@ -312,7 +321,7 @@ class ReconciliationService:
         )
         secondary_snapshot = engine.SourceSnapshot(
             code=fund.code,
-            source=self._danjuan.name,
+            source=self._danjuan.source_name,
             profile=secondary.danjuan_profile if secondary.danjuan_available else None,
             nav_points=secondary.danjuan_nav_points if secondary.danjuan_available else [],
             fetched_at=_utc_now(),
@@ -431,7 +440,7 @@ class ReconciliationService:
             "overall_status": summary.overall_status,
             "threshold_version": THRESHOLD_VERSION,
             "config_version": cfg_public(summary.config),
-            "sources": [self._primary.name, self._danjuan.name, self._sina.name],
+            "sources": [self._primary.name, self._danjuan.source_name, self._sina.source_name],
             "generated_at": summary.generated_at.isoformat(),
             "fund_count": len(funds),
             "critical_failure_count": sum(1 for r in summary.funds if r.critical_failures),
@@ -461,7 +470,7 @@ class ReconciliationService:
                 "schema_version": RECONCILE_REPORT_SCHEMA_VERSION,
                 "threshold_version": THRESHOLD_VERSION,
                 "overall_status": summary.overall_status,
-                "sources": [self._primary.name, self._danjuan.name, self._sina.name],
+                "sources": [self._primary.name, self._danjuan.source_name, self._sina.source_name],
                 "generated_at": summary.generated_at.isoformat(),
                 "config": cfg_public(summary.config),
                 "funds": [
