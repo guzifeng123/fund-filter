@@ -1,0 +1,74 @@
+{
+  "url": "https://danjuanfunds.com/djapi/fund/nav/history/000001?page=1&size=10",
+  "body": {
+    "data": {
+      "items": [
+        {
+          "date": "2026-09-29",
+          "nav": "1.2460",
+          "percentage": "0.16",
+          "value": "1.2460"
+        },
+        {
+          "date": "2026-09-28",
+          "nav": "1.2440",
+          "percentage": "-3.94",
+          "value": "1.2440"
+        },
+        {
+          "date": "2026-09-24",
+          "nav": "1.2950",
+          "percentage": "-2.19",
+          "value": "1.2950"
+        },
+        {
+          "date": "2026-09-23",
+          "nav": "1.3240",
+          "percentage": "-0.23",
+          "value": "1.3240"
+        },
+        {
+          "date": "2026-09-22",
+          "nav": "1.3270",
+          "percentage": "-0.38",
+          "value": "1.3270"
+        },
+        {
+          "date": "2026-09-21",
+          "nav": "1.3320",
+          "percentage": "-0.08",
+          "value": "1.3320"
+        },
+        {
+          "date": "2026-09-18",
+          "nav": "1.3330",
+          "percentage": "2.7",
+          "value": "1.3330"
+        },
+        {
+          "date": "2026-09-17",
+          "nav": "1.2980",
+          "percentage": "0.15",
+          "value": "1.2980"
+        },
+        {
+          "date": "2026-09-16",
+          "nav": "1.2960",
+          "percentage": "3.68",
+          "value": "1.2960"
+        },
+        {
+          "date": "2026-09-15",
+          "nav": "1.2500",
+          "percentage": "1.21",
+          "value": "1.2500"
+        }
+      ],
+      "current_page": 1,
+      "size": 10,
+      "total_items": 6006,
+      "total_pages": 601
+    },
+    "result_code": 0
+  }
+}

@@ -1,0 +1,466 @@
+{
+  "url": "https://danjuanfunds.com/djapi/fund/detail/000001",
+  "body": {
+    "data": {
+      "fund_company": "    华夏基金管理有限公司成立于1998年4月9日,是经中国证监会批准成立的首批全国性基金管理公司之一。公司总部设在北京,在北京、上海、深圳、成都、南京、杭州、广州和青岛设有分公司,在香港、深圳、上海设有子公司。\n    华夏基金定位于综合性、全能化的资产管理公司,服务范围覆盖多个资产类别、行业和地区,构建了以公募基金和机构业务为核心,涵盖华夏香港、华夏资本、华夏财富的多元化资产管理平台。\n    华夏基金规范运作、稳健经营,以雄厚的综合实力持续保持了行业的领先地位。公司拥有18年投资管理经验,是管理基金规模最大的基金管理公司之一。截至2016年12月31日,公司服务机构客户超过4万户,服务公众持有人超过4500万户。华夏基金秉承“为信任奉献回报”的企业宗旨,注重将投资收益及时转化为红利,为投资人创造了丰厚的回报,累计为持有人分红超过1282亿元。\n    华夏基金在业内最早提出了“研究创造价值”的投资理念,以卓越的主动投资管理为核心,建立了业内最大的投研团队之一,通过宏观趋势判断、策略研究以及实地调研,审视每一个投资标的基本面及投资潜力,力求为投资者提供长期而稳定的投资收益。\n    华夏基金拥有卓越的平台、雄厚的实力以及良好的声誉,汇聚了大批优秀的研究员及基金经理,选拔了海内外知名高校的优秀人才,构建了精英荟萃的投研平台,逐步形成了业内规模最大的投资团队之一,并形成了稳定而长远的投资管理模式。\n    在公募基金方面,华夏基金建立了完善的基金产品线,旗下公募基金超过100只,可以满足不同投资者的各类投资需求。主动管理的基金囊括了货币型、理财型、债券型、混合型以及股票型等5大类不同风险收益特征的品种;在被动管理方面,公司构建了覆盖综合指数、权重股指数、中小盘指数、行业指数以及海外市场指数的完善的产品线。\n    华夏基金机构业务包括全国社保、企业年金、基本养老金、职业年金、专户理财业务、机构客户公募基金组合管理业务及海外机构业务。围绕机构客户的多元化投资需求,华夏基金构建了以投资、产品、风控为核心,全面覆盖机构股票投资、机构债券投资、数量投资、现金管理以及海外投资在内的专属投资管理和服务平台。\n    18年来,华夏基金凭借规范的经营管理及良好的品牌声誉,获得了业界的广泛认可,多次荣获境内外各大权威奖项。华夏基金八次获得《中国证券报》评选的“金牛基金管理公司奖”,八次获得《上海证券报》评选的 “金基金top公司大奖”,五次获得《证券时报》评选的“明星基金公司奖”,并多次获得《亚洲投资者》、《亚洲资产管理》以及《财资》等境外权威机构评选的“中国最佳基金管理公司奖”。",
+      "fund_position": {
+        "source": "3",
+        "source_mark": "中报",
+        "enddate": 1782748800000,
+        "asset_tot": 3999438408.71,
+        "asset_val": 3938207602.85,
+        "stock_percent": 78.76,
+        "cash_percent": 0.78,
+        "bond_percent": 19.88,
+        "other_percent": 0.58,
+        "stock_list": [
+          {
+            "name": "中际旭创",
+            "code": "300308",
+            "percent": 6.45,
+            "current_price": 817.01,
+            "change_percentage": 0.49,
+            "xq_symbol": "SZ300308",
+            "xq_url": "https://xueqiu.com/S/SZ300308",
+            "change_of_pre_quarter": "2.14%",
+            "change_of_pre_quarter_type": 1,
+            "industry_label": "通信",
+            "percent_double": 6.45,
+            "amarket": true
+          },
+          {
+            "name": "华虹宏力",
+            "code": "688347",
+            "percent": 5.57,
+            "current_price": 213.58,
+            "change_percentage": -2.52,
+            "xq_symbol": "SH688347",
+            "xq_url": "https://xueqiu.com/S/SH688347",
+            "change_of_pre_quarter": "2.77%",
+            "change_of_pre_quarter_type": 1,
+            "percent_double": 5.57,
+            "amarket": true
+          },
+          {
+            "name": "中科飞测",
+            "code": "688361",
+            "percent": 5.09,
+            "current_price": 354.81,
+            "change_percentage": 0.03,
+            "xq_symbol": "SH688361",
+            "xq_url": "https://xueqiu.com/S/SH688361",
+            "change_of_pre_quarter": "2.98%",
+            "change_of_pre_quarter_type": 1,
+            "percent_double": 5.09,
+            "amarket": true
+          },
+          {
+            "name": "中微公司",
+            "code": "688012",
+            "percent": 4.7,
+            "current_price": 327.08,
+            "change_percentage": 0.71,
+            "xq_symbol": "SH688012",
+            "xq_url": "https://xueqiu.com/S/SH688012",
+            "change_of_pre_quarter": "1.63%",
+            "change_of_pre_quarter_type": 1,
+            "percent_double": 4.7,
+            "amarket": true
+          },
+          {
+            "name": "华海清科",
+            "code": "688120",
+            "percent": 4.29,
+            "current_price": 231.69,
+            "change_percentage": -0.56,
+            "xq_symbol": "SH688120",
+            "xq_url": "https://xueqiu.com/S/SH688120",
+            "change_of_pre_quarter": "1.91%",
+            "change_of_pre_quarter_type": 1,
+            "percent_double": 4.29,
+            "amarket": true
+          },
+          {
+            "name": "拓荆科技",
+            "code": "688072",
+            "percent": 3.84,
+            "current_price": 656.61,
+            "change_percentage": -0.01,
+            "xq_symbol": "SH688072",
+            "xq_url": "https://xueqiu.com/S/SH688072",
+            "change_of_pre_quarter": "1.63%",
+            "change_of_pre_quarter_type": 1,
+            "percent_double": 3.84,
+            "amarket": true
+          },
+          {
+            "name": "寒武纪",
+            "code": "688256",
+            "percent": 3.81,
+            "current_price": 1018.51,
+            "change_percentage": -2.63,
+            "xq_symbol": "SH688256",
+            "xq_url": "https://xueqiu.com/S/SH688256",
+            "change_of_pre_quarter": "1.47%",
+            "change_of_pre_quarter_type": 1,
+            "percent_double": 3.81,
+            "amarket": true
+          },
+          {
+            "name": "北方华创",
+            "code": "002371",
+            "percent": 3.69,
+            "current_price": 632.81,
+            "change_percentage": 0.61,
+            "xq_symbol": "SZ002371",
+            "xq_url": "https://xueqiu.com/S/SZ002371",
+            "change_of_pre_quarter": "0.91%",
+            "change_of_pre_quarter_type": 1,
+            "industry_label": "电子",
+            "percent_double": 3.69,
+            "amarket": true
+          },
+          {
+            "name": "海光信息",
+            "code": "688041",
+            "percent": 3.16,
+            "current_price": 231,
+            "change_percentage": -2.07,
+            "xq_symbol": "SH688041",
+            "xq_url": "https://xueqiu.com/S/SH688041",
+            "change_of_pre_quarter": "0.68%",
+            "change_of_pre_quarter_type": 1,
+            "percent_double": 3.16,
+            "amarket": true
+          },
+          {
+            "name": "芯源微",
+            "code": "688037",
+            "percent": 3.12,
+            "current_price": 335.82,
+            "change_percentage": -1.41,
+            "xq_symbol": "SH688037",
+            "xq_url": "https://xueqiu.com/S/SH688037",
+            "change_of_pre_quarter": "新增",
+            "change_of_pre_quarter_type": 4,
+            "percent_double": 3.12,
+            "amarket": true
+          }
+        ],
+        "bond_list": [
+          {
+            "name": "26国债01",
+            "code": "019827",
+            "percent": 7.05,
+            "xq_symbol": "019827",
+            "percent_double": 7.05,
+            "amarket": false
+          },
+          {
+            "name": "25国债13",
+            "code": "019785",
+            "percent": 3.68,
+            "xq_symbol": "019785",
+            "percent_double": 3.68,
+            "amarket": false
+          },
+          {
+            "name": "26农发01",
+            "code": "260401",
+            "percent": 1.54,
+            "xq_symbol": "260401",
+            "percent_double": 1.54,
+            "amarket": false
+          },
+          {
+            "name": "25广D13",
+            "code": "524462",
+            "percent": 1.28,
+            "xq_symbol": "524462",
+            "percent_double": 1.28,
+            "amarket": false
+          },
+          {
+            "name": "25国债19",
+            "code": "019792",
+            "percent": 1.03,
+            "xq_symbol": "019792",
+            "percent_double": 1.03,
+            "amarket": false
+          },
+          {
+            "name": "顺博转债",
+            "code": "127068",
+            "percent": 0.17,
+            "xq_symbol": "127068",
+            "percent_double": 0.17,
+            "amarket": false
+          },
+          {
+            "name": "和邦转债",
+            "code": "113691",
+            "percent": 0.16,
+            "xq_symbol": "113691",
+            "percent_double": 0.16,
+            "amarket": false
+          },
+          {
+            "name": "回天转债",
+            "code": "123165",
+            "percent": 0.16,
+            "xq_symbol": "123165",
+            "percent_double": 0.16,
+            "amarket": false
+          },
+          {
+            "name": "密卫转债",
+            "code": "113658",
+            "percent": 0.16,
+            "xq_symbol": "113658",
+            "percent_double": 0.16,
+            "amarket": false
+          },
+          {
+            "name": "温氏转债",
+            "code": "123107",
+            "percent": 0.16,
+            "xq_symbol": "123107",
+            "percent_double": 0.16,
+            "amarket": false
+          }
+        ],
+        "chart_list": [
+          {
+            "type_desc": "股票",
+            "type": "stock",
+            "percent": 78.76,
+            "color": "#F04848"
+          },
+          {
+            "type_desc": "债券",
+            "type": "bond",
+            "percent": 19.88,
+            "color": "#287DFF"
+          },
+          {
+            "type_desc": "现金",
+            "type": "cash",
+            "percent": 0.78,
+            "color": "#FFCA03"
+          },
+          {
+            "type_desc": "其他",
+            "type": "other",
+            "percent": 0.58,
+            "color": "#ACAFBD"
+          }
+        ],
+        "important_list_show": 1,
+        "industry_list": [
+          {
+            "industry_code": "S27",
+            "industry_name": "电子",
+            "percent": 15.88,
+            "color": "#287DFF"
+          },
+          {
+            "industry_code": "S73",
+            "industry_name": "通信",
+            "percent": 10.73,
+            "color": "#FFA100"
+          },
+          {
+            "industry_code": "S63",
+            "industry_name": "电力设备",
+            "percent": 3.01,
+            "color": "#C539C8"
+          },
+          {
+            "industry_code": "OTHER",
+            "industry_name": "其他",
+            "percent": 70.38,
+            "color": "#ACAFBD"
+          }
+        ],
+        "industry_tip": [
+          {
+            "title": "基金行业持仓",
+            "content": "基金完整行业持仓数据来源基金半年报或年报，不包含基金季报数据，季报更新后行业数据与十大重仓股票存在不一致可能性。基金行业持仓数据仅供参考，不构成投资建议。"
+          }
+        ],
+        "end_date_str": "2026-06-30"
+      },
+      "fund_rates": {
+        "fd_code": "000001",
+        "subscribe_rate": "0.0",
+        "declare_rate": "1.5",
+        "withdraw_rate": "1.5",
+        "discount": "0.1",
+        "subscribe_discount": "1",
+        "declare_discount": "0.1",
+        "declare_rate_table": [
+          {
+            "name": "0.0万<买入金额<100.0万",
+            "value": "1.5",
+            "unit": "2",
+            "special": false
+          },
+          {
+            "name": "100.0万<=买入金额<500.0万",
+            "value": "1.2",
+            "unit": "2",
+            "special": false
+          },
+          {
+            "name": "500.0万<=买入金额<1000.0万",
+            "value": "0.8",
+            "unit": "2",
+            "special": false
+          },
+          {
+            "name": "1000.0万<=买入金额",
+            "value": "1000.0",
+            "unit": "1",
+            "special": false
+          }
+        ],
+        "withdraw_rate_table": [
+          {
+            "name": "0.0天<持有期限<7.0天",
+            "value": "1.5",
+            "unit": "2",
+            "special": false
+          },
+          {
+            "name": "7.0天<=持有期限",
+            "value": "0.5",
+            "unit": "2",
+            "special": false
+          }
+        ],
+        "other_rate_table": [
+          {
+            "name": "基金管理费",
+            "value": "1.2",
+            "unit": "2",
+            "special": false
+          },
+          {
+            "name": "基金托管费",
+            "value": "0.2",
+            "unit": "2",
+            "special": false
+          }
+        ]
+      },
+      "manager_list": [
+        {
+          "indi_id": "302010578",
+          "name": "刘睿聪",
+          "resume": "    2013年6月至2016年7月,曾任美国摩根大通银行风险管理经理,2016年8月至2017年6月,曾任南方基金管理股份有限公司交易员。 2017年7月加入华夏基金管理有限公司,历任交易员、研究员、基金经理助理。",
+          "work_year": "10",
+          "achievement_list": [
+            {
+              "fund_code": "000001",
+              "fundsname": "华夏成长混合",
+              "post_date": "2024-12-26",
+              "cp_rate": 48.7439
+            },
+            {
+              "fund_code": "019730",
+              "fundsname": "华夏国企红利混合C",
+              "post_date": "2024-02-27",
+              "cp_rate": 5.56
+            },
+            {
+              "fund_code": "019729",
+              "fundsname": "华夏国企红利混合A",
+              "post_date": "2024-02-27",
+              "cp_rate": 7.03
+            },
+            {
+              "fund_code": "002232",
+              "fundsname": "华夏新趋势灵活配置混合C",
+              "post_date": "2022-12-28",
+              "resi_date": "2024-12-05",
+              "cp_rate": 1.2658
+            },
+            {
+              "fund_code": "002231",
+              "fundsname": "华夏新趋势灵活配置混合A",
+              "post_date": "2022-12-28",
+              "resi_date": "2024-12-05",
+              "cp_rate": 1.7348
+            }
+          ]
+        },
+        {
+          "indi_id": "302000070",
+          "name": "郑晓辉",
+          "resume": "    2003年6月至2008年4月,曾任长盛基金研究员、基金经理助理、基金经理等。 2008年5月加入华夏基金管理有限公司,历任投资经理、机构投资部总经理助理、机构投资部副总经理、股票投资部副总经理。",
+          "college": "北京大学光华管理学院",
+          "work_year": "23",
+          "achievement_list": [
+            {
+              "fund_code": "000001",
+              "fundsname": "华夏成长混合",
+              "post_date": "2024-12-26",
+              "cp_rate": 48.7439
+            },
+            {
+              "fund_code": "017603",
+              "fundsname": "华夏国企创新混合C",
+              "post_date": "2024-04-02",
+              "cp_rate": 121.85
+            },
+            {
+              "fund_code": "017602",
+              "fundsname": "华夏国企创新混合A",
+              "post_date": "2024-04-02",
+              "cp_rate": 125.18
+            },
+            {
+              "fund_code": "001924",
+              "fundsname": "华夏国企改革灵活配置混合",
+              "post_date": "2015-11-25",
+              "resi_date": "2024-08-07",
+              "cp_rate": 11.4
+            },
+            {
+              "fund_code": "002031",
+              "fundsname": "华夏策略混合",
+              "post_date": "2015-06-16",
+              "resi_date": "2016-09-14",
+              "cp_rate": -14.8642
+            },
+            {
+              "fund_code": "000021",
+              "fundsname": "华夏优势增长混合",
+              "post_date": "2013-05-10",
+              "cp_rate": 206.186
+            },
+            {
+              "fund_code": "184699",
+              "fundsname": "长盛同盛封闭",
+              "post_date": "2006-11-29",
+              "resi_date": "2008-04-26",
+              "cp_rate": 88.4761
+            }
+          ]
+        }
+      ],
+      "fund_date_conf": {
+        "fd_code": "000001",
+        "buy_confirm_date": 1,
+        "buy_query_date": 1,
+        "sale_confirm_date": 1,
+        "sale_query_date": 3,
+        "all_buy_days": 2,
+        "all_sale_days": 4
+      },
+      "show_service_rate_tip": false,
+      "pension_fund": false
+    },
+    "result_code": 0
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "url": "https://danjuanfunds.com/djapi/fund/nav/history/002910?page=1&size=5",
+  "body": {
+    "data": {
+      "items": [
+        {
+          "date": "2026-09-29",
+          "nav": "7.8755",
+          "percentage": "0.1",
+          "value": "7.8755"
+        },
+        {
+          "date": "2026-09-28",
+          "nav": "7.8674",
+          "percentage": "-1.5",
+          "value": "7.8674"
+        },
+        {
+          "date": "2026-09-24",
+          "nav": "7.9869",
+          "percentage": "-2.06",
+          "value": "7.9869"
+        },
+        {
+          "date": "2026-09-23",
+          "nav": "8.1550",
+          "percentage": "-0.58",
+          "value": "8.1550"
+        },
+        {
+          "date": "2026-09-22",
+          "nav": "8.2026",
+          "percentage": "0.12",
+          "value": "8.2026"
+        }
+      ],
+      "current_page": 1,
+      "size": 5,
+      "total_items": 2341,
+      "total_pages": 469
+    },
+    "result_code": 0
+  }
+}
