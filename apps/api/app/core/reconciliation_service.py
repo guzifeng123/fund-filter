@@ -112,6 +112,23 @@ class _SecondaryResult:
     warnings: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class IsolatedReconciliation:
+    """Result of a per-fund isolated cross-check (D2 batch runner).
+
+    Unlike :meth:`ReconciliationService.reconcile_snapshot`, this never raises on
+    a blocking fund: it returns the single-fund report plus the danjuan
+    reachability signal so the batch runner can isolate one bad/absent fund
+    instead of rolling back the whole generation. ``danjuan_error`` is the
+    stringified exception the required source raised (empty when it answered);
+    the runner classifies it as a hard "not listed" skip vs a transient retry.
+    """
+
+    report: engine.FundReconciliationReport
+    danjuan_available: bool
+    danjuan_error: str | None
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -301,6 +318,32 @@ class ReconciliationService:
 
         self._enforce_strict(summary, report_path, cfg)
         return summary
+
+    # -- D2: per-fund isolated gate (never rolls back the whole generation) ----
+
+    def reconcile_one_fund_isolated(self, fund: FundDetail) -> IsolatedReconciliation:
+        """Cross-check a single fetched fund without any batch-wide side effect.
+
+        Reuses the exact same ``_fetch_secondary`` + ``_reconcile_one_fund``
+        primitives as the strict whole-snapshot gate, but returns the single-fund
+        report (and the danjuan reachability signal) instead of raising on the
+        first blocker. The batch runner decides per fund:
+
+        * ``report.status == "mismatch"``        -> reconciliation_mismatch skip
+        * ``report.status == "source_unavailable"`` and danjuan reachable but
+          hard-404 / not-listed                  -> danjuan_not_listed skip
+        * ``report.status == "source_unavailable"`` for a transient danjuan outage
+                                                 -> retryable failed
+        * ``verified`` / ``unverified``         -> eligible to be promoted
+        """
+        cfg = engine.ReconcileConfig.from_settings(self._settings)
+        secondary = self._fetch_secondary(fund)
+        report = self._reconcile_one_fund(fund, secondary, cfg)
+        return IsolatedReconciliation(
+            report=report,
+            danjuan_available=secondary.danjuan_available,
+            danjuan_error=secondary.danjuan_error,
+        )
 
     # -- C1 engine adapter ------------------------------------------------------
 
@@ -546,6 +589,7 @@ def _json_default(value: object) -> object:
 __all__ = [
     "DETAIL_FUND_LIMIT",
     "THRESHOLD_VERSION",
+    "IsolatedReconciliation",
     "ReconciliationError",
     "ReconciliationService",
     "ReconciliationSourceLike",
