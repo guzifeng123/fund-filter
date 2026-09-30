@@ -49,7 +49,45 @@ FUND_TYPE_PREFIXES: dict[str, FundType] = {
     # bucket, so they map to the balanced ``mixed`` bucket.
     "FOF": "mixed",
     "货币型": "money",
+    # --- Ordinary QDII (overseas OTC open-end) mobile FTYPEs -----------------
+    # The eastmoney mobile FTYPE for ordinary QDII funds is the literal string
+    # "QDII-<subclass>" (verified per-fund against the live endpoint; see the G-stage
+    # evidence table). C1's map_fund_type already collapses EVERY one of these to the
+    # canonical "qdii" bucket on BOTH sides -- eastmoney ``_fund_type_raw`` carries the
+    # mobile FTYPE verbatim, and danjuan ``type_desc`` is "QDII-股票" / "QDII-债券" /
+    # "QDII-混合" (note: even "QDII-混合债" is labelled "QDII-债券" by danjuan, so both
+    # sides -> "qdii" and never a qdii-vs-bond mismatch). These entries only choose the
+    # 4-bucket STORAGE bucket; they do not alter the reconciliation contract.
+    #
+    # ORDER MATTERS: dict insertion order = first startswith hit. The full
+    # "QDII-<subclass>" strings MUST precede the bare "QDII" catch-all below, and we
+    # deliberately do NOT add a shared "QDII-混合" key -- it would also startswith-match
+    # "QDII-混合债" and wrongly park an overseas bond fund in ``mixed``.
+    "QDII-FOF": "mixed",  # FOF collapses to the balanced mixed bucket, same as plain FOF above
+    "QDII-混合偏股": "mixed",
+    "QDII-混合灵活": "mixed",
+    "QDII-混合平衡": "mixed",
+    "QDII-混合债": "bond",  # overseas bond fund; danjuan spells it "QDII-债券"
+    "QDII-纯债": "bond",
+    "QDII-普通股票": "stock",
+    # Catch-all for any ordinary QDII subclass string we have not explicitly enumerated.
+    # We deliberately do NOT default unmapped QDII to ``stock``: overseas multi-asset
+    # funds are the most likely unforeseen variant, so the balanced ``mixed`` bucket is
+    # the conservative storage choice, and reconciliation still re-derives "qdii" from
+    # the raw text on both sides. MUST stay after every specific "QDII-<subclass>" key.
+    "QDII": "mixed",
 }
+
+# QDII commodity / REITs are special caliber: fund_classifier routes them to
+# ``special_caliber`` long before the builder runs, so they never call
+# build_fund_snapshot. This is a defensive backstop -- if one ever slips through (a new
+# upstream string, a mis-routed universe row), fail loudly instead of collapsing it into
+# an ordinary stock/mixed/bond/money bucket. Checked BEFORE the prefix loop so the bare
+# "QDII" catch-all above can never silently absorb them.
+_QDII_SPECIAL_PREFIXES: tuple[str, ...] = (
+    "QDII-商品",
+    "QDII-REIT",  # covers "QDII-REITs" / "QDII-REIT"
+)
 RISK_LEVELS: dict[str, RiskLevel] = {
     "1": "R1",
     "2": "R2",
@@ -134,6 +172,12 @@ def _parse_inception_date(text: str) -> date:
 
 
 def _normalize_fund_type(value: str) -> FundType:
+    for special in _QDII_SPECIAL_PREFIXES:
+        if value.startswith(special):
+            raise ValueError(
+                "unsupported eastmoney fund type "
+                f"(special caliber, routed elsewhere, not an ordinary OTC bucket): {value}"
+            )
     for prefix, normalized in FUND_TYPE_PREFIXES.items():
         if value.startswith(prefix):
             return normalized
