@@ -44,7 +44,7 @@ from app.core import nav_series_quality as series_q
 from app.core import profile_quality as profile_q
 from app.core.config import Settings, settings
 from app.core.reconciliation_service import IsolatedReconciliation, ReconciliationService
-from app.db.models import FundNav, JobRun, JsonObject, JsonValue
+from app.db.models import Fund, FundDataSnapshot, FundNav, JobRun, JsonObject, JsonValue
 from app.jobs.batch_state import BatchState
 from app.jobs.batch_throttle import (
     BatchThrottle,
@@ -55,6 +55,7 @@ from app.jobs.batch_throttle import (
 from app.repositories.fund_snapshots import (
     lock_snapshot_state,
     promote_snapshot,
+    refresh_snapshot_metadata,
     stage_snapshot,
     validate_staged_snapshot,
 )
@@ -408,6 +409,127 @@ class BatchRunner:
         self._db.add(job)
         self._db.flush()
 
+    # -------------------------------------------- coalesced full-market model
+    # A full-market job spans hundreds of batches. Promoting one generation per
+    # batch would move the single active-generation pointer to each batch in turn,
+    # so after the run only the last batch's funds would be visible. In coalesced
+    # mode the whole job accumulates into ONE staging generation that is published
+    # exactly once, after every batch is processed; an operator pause
+    # (``--max-batches``) or a crash leaves it staging and ``--resume`` reattaches.
+    def _resume_coalesced_generation(self) -> str | None:
+        """Recover an unfinished coalesced generation id at the start of a run."""
+        generation_id = self._state.get_coalesced_generation(self.job_id)
+        if generation_id is None:
+            return None
+        if self._db.get(FundDataSnapshot, generation_id) is None:
+            raise RuntimeError(
+                f"checkpoint references coalesced generation {generation_id!r} for "
+                f"job {self.job_id!r} that is absent from the business database; "
+                "refusing to create a parallel generation"
+            )
+        return generation_id
+
+    def _stage_into_coalesced(
+        self, generation_id: str | None, passed: list[FundDetail]
+    ) -> str:
+        """Create the job generation once, then accumulate this batch into it.
+
+        The generation stays ``staging`` (invisible; reads only see the active
+        generation) until :meth:`_finalize_coalesced`. Each batch commits as it
+        lands, so a crash loses only the in-flight batch, whose codes are reclaimed
+        and re-staged idempotently on resume.
+        """
+        if generation_id is None:
+            generation_id = _new_generation_id()
+            stage_snapshot(
+                self._db,
+                generation_id=generation_id,
+                source=self._source_name,
+                fund_count=0,
+                nav_count=0,
+                metric_count=0,
+            )
+            ensure_default_portfolios(self._db)
+            # Persist the staging generation FIRST ...
+            self._db.commit()
+            # ... then point the checkpoint at it, so a meta pointer can never
+            # reference a generation row that does not exist in the business DB.
+            self._state.set_coalesced_generation(self.job_id, generation_id)
+        stage_funds_batch(
+            self._db,
+            passed,
+            generation_id,
+            batch_size=self._settings.fund_write_batch_size,
+        )
+        self._db.commit()
+        return generation_id
+
+    def _finalize_coalesced(self, generation_id: str) -> None:
+        """Recount, validate and publish the single coalesced generation once."""
+        snapshot = refresh_snapshot_metadata(
+            self._db,
+            generation_id=generation_id,
+            fallback_source=self._source_name,
+        )
+        # A failed validation must leave the previous active generation serving.
+        validate_staged_snapshot(self._db, snapshot)
+        lock = lock_snapshot_state(self._db)
+        promote_snapshot(self._db, state=lock, snapshot=snapshot)
+        self._record_coalesced_job_details(snapshot)
+        self._db.commit()
+        self._state.clear_coalesced_generation(self.job_id)
+
+    def _record_coalesced_job_details(self, snapshot: FundDataSnapshot) -> None:
+        """Record one job-level JobRun. Counts are authoritative across resumed
+        processes: the generation's own recounted row counts plus the checkpoint's
+        terminal-state stats (a resumed process only re-handles its own batches)."""
+        stats = self._state.stats()
+        skipped_rows: list[JsonValue] = [
+            {"code": c, "reason": r} for c, r in self._state.terminal_skipped(_DETAIL_CODE_LIMIT)
+        ]
+        failed_rows: list[JsonValue] = [
+            {"code": c, "error": e} for c, e in self._state.terminal_failed(_DETAIL_CODE_LIMIT)
+        ]
+        passed_codes: list[JsonValue] = list(
+            self._db.scalars(
+                select(Fund.code)
+                .where(Fund.snapshot_generation_id == snapshot.generation_id)
+                .order_by(Fund.code)
+                .limit(_DETAIL_CODE_LIMIT)
+            ).all()
+        )
+        details: JsonObject = {
+            "source": self._source_name,
+            "runner": "batch_runner",
+            "job_id": self.job_id,
+            "coalesced": True,
+            "shard": self._shard,
+            "shard_workers": self._settings.fund_batch_workers,
+            "snapshot_generation_id": snapshot.generation_id,
+            "passed_count": snapshot.fund_count,
+            "nav_count": snapshot.nav_count,
+            "metric_count": snapshot.metric_count,
+            "skipped_count": stats.by_status.get("skipped", 0),
+            "failed_count": stats.by_status.get("failed", 0),
+            "pending_count": stats.by_status.get("pending", 0),
+            "in_flight_count": stats.by_status.get("in_flight", 0),
+            "passed_codes": passed_codes,
+            "passed_codes_truncated": snapshot.fund_count > _DETAIL_CODE_LIMIT,
+            "skipped": skipped_rows,
+            "failed": failed_rows,
+        }
+        now = datetime.now(timezone.utc)
+        self._db.add(
+            JobRun(
+                name=f"batch_sync:{self.job_id}",
+                status="success",
+                started_at=now,
+                finished_at=now,
+                details=details,
+            )
+        )
+        self._db.flush()
+
     # ------------------------------------------------------------------ loop
     def run(
         self,
@@ -415,33 +537,64 @@ class BatchRunner:
         batch_size: int | None = None,
         max_batches: int | None = None,
         dry_run: bool = False,
+        coalesce: bool | None = None,
     ) -> RunSummary:
         size = batch_size or self._settings.fund_batch_size
+        coalesce = (
+            self._settings.fund_batch_coalesce_generation
+            if coalesce is None
+            else coalesce
+        )
         summary = RunSummary()
         batch_no = 0
+        # Coalesced jobs publish a single generation for the whole run; on resume
+        # we reattach to the unfinished staging generation via checkpoint meta.
+        coalesced_gen: str | None = None
+        if coalesce and not dry_run:
+            coalesced_gen = self._resume_coalesced_generation()
+        exhausted = False
         while True:
             if max_batches is not None and batch_no >= max_batches:
+                # Operator-paused (gray release): keep the staging generation and
+                # do NOT publish; --resume with the same job_id keeps accumulating.
                 break
             codes = self._claim(size)
             if not codes:
+                exhausted = True
                 break
             outcomes = [self._process_one(code) for code in codes]
             passed_funds = [o.fund for o in outcomes if o.kind == "passed" and o.fund is not None]
-            report = BatchReport(codes=tuple(codes), outcomes=tuple(outcomes), generation_id=None)
+            full_report = BatchReport(
+                codes=tuple(codes), outcomes=tuple(outcomes), generation_id=None
+            )
 
             generation_id: str | None = None
             if not dry_run and passed_funds:
                 try:
-                    generation_id = self._promote_batch(
-                        passed_funds, job_id=self.job_id, batch_no=batch_no, reports=[report]
-                    )
+                    if coalesce:
+                        coalesced_gen = self._stage_into_coalesced(
+                            coalesced_gen, passed_funds
+                        )
+                        generation_id = coalesced_gen
+                    else:
+                        generation_id = self._promote_batch(
+                            passed_funds,
+                            job_id=self.job_id,
+                            batch_no=batch_no,
+                            reports=[full_report],
+                        )
                 except Exception:
                     self._db.rollback()
-                    logger.exception("batch %d promotion failed; %d codes stay in_flight", batch_no, len(codes))
+                    logger.exception(
+                        "batch %d staging/promotion failed; %d codes stay in_flight",
+                        batch_no,
+                        len(codes),
+                    )
                     raise
 
-            # Checkpoint transitions happen AFTER a successful promotion so a crash
-            # leaves codes in_flight (reclaimed on restart) rather than falsely done.
+            # Checkpoint transitions happen AFTER the business DB write commits so
+            # a crash leaves codes in_flight (reclaimed on restart), never falsely
+            # done. In coalesced mode the generation is still staging here.
             if not dry_run:
                 for outcome in outcomes:
                     if outcome.kind == "passed" and outcome.fund is not None:
@@ -464,10 +617,35 @@ class BatchRunner:
             summary.passed += len(passed_funds)
             summary.skipped += sum(1 for o in outcomes if o.kind == "skipped")
             summary.failed += sum(1 for o in outcomes if o.kind == "failed")
-            if generation_id is not None:
+            if not coalesce and generation_id is not None:
                 summary.generations.append(generation_id)
-            summary.reports.append(report)
+            # Strip the full FundDetail payloads before retaining a report, so a
+            # 354-batch full-market run cannot hold ~22m NAV points in memory.
+            slim_outcomes = tuple(
+                _Outcome(
+                    code=o.code,
+                    kind=o.kind,
+                    fund=None,
+                    reason=o.reason,
+                    error=o.error,
+                    retryable=o.retryable,
+                )
+                for o in outcomes
+            )
+            summary.reports.append(
+                BatchReport(
+                    codes=tuple(codes),
+                    outcomes=slim_outcomes,
+                    generation_id=generation_id,
+                )
+            )
             batch_no += 1
+
+        # Publish the coalesced generation only when the checkpoint is naturally
+        # exhausted (no pending codes left) -- never after an operator pause.
+        if coalesce and not dry_run and coalesced_gen is not None and exhausted:
+            self._finalize_coalesced(coalesced_gen)
+            summary.generations = [coalesced_gen]
         return summary
 
 

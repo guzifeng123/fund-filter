@@ -830,6 +830,16 @@ class Settings:
             "FUND_BATCH_INCLUDE_SHORT_HISTORY",
             "false",
         )
+        # G-stage: coalesce a whole (possibly multi-hundred-batch, resumable)
+        # full-market job into ONE snapshot generation published only after every
+        # batch is processed. When false the legacy "one independent generation
+        # per batch" behaviour is kept (each batch is a standalone complete
+        # snapshot, so a sharded full-market run would leave only its last batch
+        # visible under the single active-generation pointer).
+        self.fund_batch_coalesce_generation = _strict_boolean(
+            "FUND_BATCH_COALESCE_GENERATION",
+            "true",
+        )
         default_universe_cache_dir = (
             Path(__file__).resolve().parents[4] / "output" / "universe"
         )
