@@ -600,68 +600,159 @@ def reconcile_profile(
                 _field_check(name, "major", rule, False, "", "", "profile unavailable; cannot verify")
             )
     else:
-        name_ok = name_matches(p.name, s.name)
-        checks.append(
-            _field_check(
-                "name",
-                "major",
-                "name_match" if name_ok else "name_mismatch",
-                name_ok,
-                p.name,
-                s.name,
-                "names agree" if name_ok else f"name differs: {p.name!r} vs {s.name!r}",
+        # --- major fields ---------------------------------------------------
+        # A one-sided missing value (None / empty / empty set / unclassifiable
+        # fund_type) means *we cannot cross-check*, not that the sources
+        # disagree: record ``<field>_skipped`` and never fabricate a mismatch.
+        # Only when BOTH sides disclose a value do we compare.
+        name_present = bool(normalize_text(p.name))
+        if not name_present or not bool(normalize_text(s.name)):
+            missing = name_present and not bool(normalize_text(s.name))
+            who = "secondary" if missing else "primary"
+            checks.append(
+                _field_check(
+                    "name",
+                    "major",
+                    "name_skipped",
+                    False,
+                    p.name,
+                    s.name,
+                    f"name undisclosed by {who}; cannot verify",
+                )
             )
-        )
-        company_ok = company_matches(p.company, s.company)
-        checks.append(
-            _field_check(
-                "company",
-                "major",
-                "company_match" if company_ok else "company_mismatch",
-                company_ok,
-                p.company,
-                s.company,
-                "company agrees" if company_ok else f"company differs: {p.company!r} vs {s.company!r}",
+        else:
+            name_ok = name_matches(p.name, s.name)
+            checks.append(
+                _field_check(
+                    "name",
+                    "major",
+                    "name_match" if name_ok else "name_mismatch",
+                    name_ok,
+                    p.name,
+                    s.name,
+                    "names agree" if name_ok else f"name differs: {p.name!r} vs {s.name!r}",
+                )
             )
-        )
-        custodian_ok = custodian_matches(p.custodian, s.custodian)
-        checks.append(
-            _field_check(
-                "custodian",
-                "major",
-                "custodian_match" if custodian_ok else "custodian_mismatch",
-                custodian_ok,
-                p.custodian,
-                s.custodian,
-                "custodian agrees" if custodian_ok else f"custodian differs: {p.custodian!r} vs {s.custodian!r}",
+
+        p_company = normalize_text(p.company)
+        s_company = normalize_text(s.company)
+        if not p_company or not s_company:
+            who = "secondary" if p_company else "primary"
+            checks.append(
+                _field_check(
+                    "company",
+                    "major",
+                    "company_skipped",
+                    False,
+                    p.company,
+                    s.company,
+                    f"company undisclosed by {who}; cannot verify",
+                )
             )
-        )
-        managers_ok = managers_overlap(p.managers, s.managers)
-        checks.append(
-            _field_check(
-                "managers",
-                "major",
-                "managers_overlap" if managers_ok else "managers_disjoint",
-                managers_ok,
-                list(p.managers),
-                list(s.managers),
-                "managers overlap" if managers_ok else "manager sets are disjoint",
+        else:
+            company_ok = company_matches(p.company, s.company)
+            checks.append(
+                _field_check(
+                    "company",
+                    "major",
+                    "company_match" if company_ok else "company_mismatch",
+                    company_ok,
+                    p.company,
+                    s.company,
+                    "company agrees" if company_ok else f"company differs: {p.company!r} vs {s.company!r}",
+                )
             )
-        )
-        p_type = map_fund_type(p.fund_type_raw)
-        s_type = map_fund_type(s.fund_type_raw)
-        type_ok = p_type == s_type
-        checks.append(
-            _field_check(
-                "fund_type",
-                "major",
-                "fund_type_match" if type_ok else "fund_type_mismatch",
-                type_ok,
-                p_type,
-                s_type,
-                f"canonical type {p_type} vs {s_type}",
+
+        p_cust = normalize_text(p.custodian)
+        s_cust = normalize_text(s.custodian)
+        if not p_cust or not s_cust:
+            who = "secondary" if p_cust else "primary"
+            checks.append(
+                _field_check(
+                    "custodian",
+                    "major",
+                    "custodian_skipped",
+                    False,
+                    p.custodian,
+                    s.custodian,
+                    f"custodian undisclosed by {who}; cannot verify",
+                )
             )
-        )
+        else:
+            custodian_ok = custodian_matches(p.custodian, s.custodian)
+            checks.append(
+                _field_check(
+                    "custodian",
+                    "major",
+                    "custodian_match" if custodian_ok else "custodian_mismatch",
+                    custodian_ok,
+                    p.custodian,
+                    s.custodian,
+                    "custodian agrees" if custodian_ok else f"custodian differs: {p.custodian!r} vs {s.custodian!r}",
+                )
+            )
+
+        p_managers = split_managers(" ".join(p.managers))
+        s_managers = split_managers(" ".join(s.managers))
+        if not p_managers or not s_managers:
+            who = "secondary" if p_managers else "primary"
+            checks.append(
+                _field_check(
+                    "managers",
+                    "major",
+                    "managers_skipped",
+                    False,
+                    list(p.managers),
+                    list(s.managers),
+                    f"managers undisclosed by {who}; cannot verify",
+                )
+            )
+        else:
+            managers_ok = bool(p_managers & s_managers)
+            checks.append(
+                _field_check(
+                    "managers",
+                    "major",
+                    "managers_overlap" if managers_ok else "managers_disjoint",
+                    managers_ok,
+                    list(p.managers),
+                    list(s.managers),
+                    "managers overlap" if managers_ok else "manager sets are disjoint",
+                )
+            )
+
+        p_raw = (p.fund_type_raw or "").strip()
+        s_raw = (s.fund_type_raw or "").strip()
+        p_type = map_fund_type(p_raw)
+        s_type = map_fund_type(s_raw)
+        # Either side missing, or either side unclassifiable -> other, means we
+        # cannot claim agreement; skip rather than fabricate a mismatch.
+        if not p_raw or not s_raw or p_type == "other" or s_type == "other":
+            who = "secondary" if p_raw else "primary"
+            checks.append(
+                _field_check(
+                    "fund_type",
+                    "major",
+                    "fund_type_skipped",
+                    False,
+                    p_type,
+                    s_type,
+                    f"fund_type undisclosed/unclassifiable by {who}; cannot verify",
+                )
+            )
+        else:
+            type_ok = p_type == s_type
+            checks.append(
+                _field_check(
+                    "fund_type",
+                    "major",
+                    "fund_type_match" if type_ok else "fund_type_mismatch",
+                    type_ok,
+                    p_type,
+                    s_type,
+                    f"canonical type {p_type} vs {s_type}",
+                )
+            )
 
         # --- minor fields ---------------------------------------------------
         bench_ok = benchmark_matches(p.benchmark, s.benchmark)
@@ -782,10 +873,19 @@ def reconcile_fund(
 
     for check in field_checks:
         if check.rule.endswith("_skipped"):
+            # One-sided / undisclosed data means "cannot verify", not a
+            # contradiction. Major skips are surfaced as warnings (they never
+            # block or downgrade); critical skips (found_date) are left for
+            # adjudicate which degrades the fund to unverified; minor skips
+            # (rates/scale) stay silent.
+            if check.severity == "major":
+                warnings.append(f"{check.field}: unverifiable, {check.detail}")
             continue
         if check.severity == "critical" and not check.match:
             critical_failures.append(f"{check.field}: {check.detail}")
-        elif check.severity == "minor" and not check.match:
+        elif not check.match:
+            # Major/minor disagreements are recorded as warnings; major ones
+            # additionally drive a mismatch only when profile_major_blocks.
             warnings.append(f"{check.field}: {check.detail}")
 
     for source in _required_unreachable(primary, secondary, cfg):
@@ -851,10 +951,13 @@ def adjudicate(
         for fc in report.field_checks
         if fc.field.startswith("rate_") and not fc.match and not fc.rule.endswith("_skipped")
     ]
+    # Only critical-side skips (found_date undisclosed) degrade to unverified.
+    # Major-side skips (company/custodian/managers/fund_type) are "cannot
+    # verify" warnings and must neither block nor downgrade the fund.
     skipped_core = [
         fc
         for fc in report.field_checks
-        if fc.rule.endswith("_skipped") and fc.severity in {"critical", "major"}
+        if fc.rule.endswith("_skipped") and fc.severity == "critical"
     ]
 
     if source_unavailable:
