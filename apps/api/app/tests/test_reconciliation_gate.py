@@ -569,3 +569,74 @@ def test_gate_share_drift_still_blocks() -> None:
     assert name_check.rule == "name_mismatch"
     assert report.status == "mismatch"
 
+
+# --- h1: high-confidence caliber / type-label drift (fixed-term / index / QDII) ---
+
+
+@pytest.mark.parametrize(
+    "primary_name,danjuan_name",
+    [
+        # 000005: one side inserts the fixed-term "定期" marker.
+        ("嘉实增强信用定期债券", "嘉实增强信用债券"),
+        # 000064: "定开" vs "定期开放" abbreviation of the same open mode.
+        ("大摩18个月定开债C", "大摩18个月定期开放债券C"),
+        # 000044: only one side spells the QDII tag; FX share wording identical.
+        ("嘉实美国成长股票美元现汇", "嘉实美国成长股票(QDII)美元现汇"),
+        # 000055: 纳斯达克 vs 纳指 index short form.
+        ("广发纳斯达克100ETF联接美元(QDII)A", "广发纳指100ETF联接美元(QDII)A"),
+        # 000059: one side omits the passive "指数" marker; index-code share "100A".
+        ("国联安中证医药100A", "国联安中证医药100指数A"),
+    ],
+)
+def test_gate_h1_softens_caliber_label_drift_to_verified(
+    primary_name: str, danjuan_name: str
+) -> None:
+    report = _name_isolated(primary_name, danjuan_name)
+    assert report.status == "verified", [
+        (c.field, c.rule) for c in report.field_checks
+    ]
+
+
+@pytest.mark.parametrize(
+    "primary_name,danjuan_name",
+    [
+        # 000042: index rename (ESG vs 可持续发展) + word order + "增强" -> block.
+        ("财通中证ESG100指数增强A", "中证财通可持续发展100指数"),
+        # 000067/000068: strategy coinage "优选" survives the skeleton -> block.
+        ("民生加银转债优选A", "民生加银可转债A"),
+        ("民生加银转债优选C", "民生加银可转债C"),
+    ],
+)
+def test_gate_h1_rename_or_strategy_word_drift_still_blocks(
+    primary_name: str, danjuan_name: str
+) -> None:
+    report = _name_isolated(primary_name, danjuan_name)
+    name_check = [c for c in report.field_checks if c.field == "name"][0]
+    assert name_check.rule == "name_mismatch"
+    assert report.status == "mismatch"
+
+
+def test_split_share_class_after_index_code_digit() -> None:
+    # The trailing A after an index-code digit ("医药100A") is a share class.
+    assert engine._split_share_class(
+        engine.normalize_fund_name("国联安中证医药100A")
+    ) == ("国联安中证医药100", "A")
+
+
+def test_split_share_class_keeps_english_acronym_tail() -> None:
+    # The final letter of an English acronym (QDII) follows another letter and
+    # must NOT be mistaken for a share class.
+    core, share = engine._split_share_class(engine.normalize_fund_name("某海外QDII"))
+    assert share == ""
+    assert core.endswith("QDII")
+
+
+def test_h1_does_not_strip_strategy_fx_or_wrapper_markers() -> None:
+    # Strategy ("增强"), FX ("美元") and on-exchange wrapper ("ETF") markers are
+    # never skeleton tokens and keep genuinely-different names apart.
+    assert engine._name_skeleton(
+        engine.normalize_fund_name("测试医药100指数增强A")
+    ) != engine._name_skeleton(engine.normalize_fund_name("测试医药100指数A"))
+    assert "美元" in engine._name_skeleton(engine.normalize_fund_name("测试股票美元现汇"))
+    assert "ETF" in engine._name_skeleton(engine.normalize_fund_name("测试100ETF联接A"))
+
