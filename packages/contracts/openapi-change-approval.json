@@ -5,14 +5,14 @@
     "git_ref": "582feb8",
     "contract_blob": "0ac67b97fcf860ec586a3d0ca887f9b1ad12f336"
   },
-  "approved_export_sha256": "5daaa88a3e985e7eb3c1c70562736031e5c64aea09b0e7968ac2a7e575728ed5",
-  "approved_diff_sha256": "0e3d4ca6bb0a1f6345e4a64cfc99a3dc4420947785d9281fa98b90505c8bc003",
-  "approved_summary_sha256": "04b1eb689487181b9f4251dad4ee33cf9f7f0d55e1e0199118d2d2d6a495b1bb62",
+  "approved_export_sha256": "74494de55490c982adbf44298115e90170d3c6f62a077f42c54ef3be5dedfb72",
+  "approved_diff_sha256": "417a5a9ffecaafff0cb2929d28fd0497977c847a8f09565a904d07052a9af931",
+  "approved_summary_sha256": "04b1eb689487181b9f4251dad4ee33cf9f7f0d55e1e0199118d2d6a495b1bb62",
   "breaking_hints_reviewed": true,
   "review": {
     "reviewed_on": "2026-09-30",
     "reviewer": "main-agent-integration",
-    "reason": "Integrated C1+C2+C3 cross-source reconciliation feature, adding one additive read-only endpoint: GET /api/data/reconciliation (latest multi-source cross-check summary: per-fund verified/mismatch/unverified/source_unavailable status, NAV point coverage/agreement, critical failures, warnings, and per-field source values). Diff vs pre-feature baseline 582feb8 adds exactly 1 operation and 3 schemas (DataReconciliationReport, FundReconciliationView, ApiResponse_DataReconciliationReport_) with zero breaking hints; no existing operation, field, constraint, response code, or required parameter changed. The write gate itself adds no endpoint and only enforces reconciliation before staging for online sources."
+    "reason": "Integrated C1+C2+C3 cross-source reconciliation feature, adding one additive read-only endpoint: GET /api/data/reconciliation (latest multi-source cross-check summary: per-fund verified/mismatch/unverified/source_unavailable status, NAV point coverage/agreement, critical failures, warnings, and per-field source values). Diff vs pre-feature baseline 582feb8 adds exactly 1 operation and 3 schemas (DataReconciliationReport, FundReconciliationView, ApiResponse_DataReconciliationReport_) with zero breaking hints; no existing operation, field, constraint, response code, or required parameter changed. The write gate itself adds no endpoint and only enforces reconciliation before staging for online sources. FundReconciliationView also surfaces two additive, optional arrays: critical_failure_details and a capped nav_mismatch_points (date plus each source's unit NAV) so a strict rejection remains auditable."
   },
   "change_list": {
     "operations_added": [

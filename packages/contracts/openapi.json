@@ -3643,6 +3643,22 @@
             "title": "Critical Failures",
             "default": 0
           },
+          "critical_failure_details": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Critical Failure Details",
+            "default": []
+          },
+          "nav_mismatch_points": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Nav Mismatch Points",
+            "default": []
+          },
           "warnings": {
             "type": "integer",
             "title": "Warnings",
