@@ -23,11 +23,12 @@ JOB_ID="${FULL_JOB_ID:-fund-full-20260930}"
 STATE_DB="${FULL_STATE_DB:-$ROOT/output/batch/state.db}"
 LOG_FILE="$ROOT/output/batch/tick.log"
 MAX_BATCHES="${TICK_MAX_BATCHES:-1}"
-# Funds claimed per tick batch: 40 funds * ~6.7s/fund ≈ 270s, inside the sandbox's
-# ~5min background-command window (eastmoney jitter can still occasionally exceed
-# it; a killed tick is safe and reclaimed by the next --resume). Override with
+# Funds claimed per tick batch. Sized so that even with eastmoney jitter
+# (~10s/fund worst case) a batch normally finishes inside the sandbox's ~5min
+# foreground-command window (~30 funds * 6.7s avg ≈ 200s); a killed tick is safe
+# and any in-flight rows are reclaimed by the next --resume. Override with
 # TICK_BATCH_SIZE. The runner reads this as FUND_BATCH_SIZE.
-BATCH_SIZE="${TICK_BATCH_SIZE:-40}"
+BATCH_SIZE="${TICK_BATCH_SIZE:-30}"
 export FUND_BATCH_SIZE="$BATCH_SIZE"
 
 # Non-blocking exclusive lock for the whole tick.
